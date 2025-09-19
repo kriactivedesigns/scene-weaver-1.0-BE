@@ -3,7 +3,12 @@
 python -m venv venv
 
 
-Activate the virtual environment:
+2. Activate the virtual environment:
 
 .\venv\Scripts\activate
+
+3. Run the Application
+
+uvicorn app.main:app --reload
+
 

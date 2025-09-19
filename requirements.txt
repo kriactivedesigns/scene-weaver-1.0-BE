@@ -1,0 +1,15 @@
+# Core Framework
+fastapi
+uvicorn[standard]
+
+# Database and ORM
+sqlalchemy
+psycopg2-binary # For Postgresql
+alembic # For database migrations
+
+# Pydantic & Settings Management
+pydantic
+pydantic-settings
+
+# For UUIDs and other utilities
+python-dotenv

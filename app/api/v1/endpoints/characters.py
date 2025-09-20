@@ -2,9 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
+import os
 
 from .... import crud, schemas
 from ....database import SessionLocal
+from .... import ai_srevices
 
 router = APIRouter()
 
@@ -47,3 +49,37 @@ def delete_character(character_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Character not found")
         
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router.post("/characters/{character_id}/generate-image", response_model=schemas.Character, status_code=status.HTTP_200_OK)
+def generate_character_image(
+    character_id: uuid.UUID,
+    request: schemas.ImageGenerateRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Generates an image for a character based on a prompt, saves it,
+    and updates the character's imagePath
+    """
+    db_character = crud.get_character(db, character_id=character_id)
+    if not db_character:
+        raise HTTPException(status_code=404, detail="Character not found")
+    
+    db_project = crud.get_project(db, project_id=db_character.projectId)
+
+    full_prompt = f"{request.prompt}, in a {db_project.visualStyle} style"
+
+    image_bytes = ai_srevices.generate_image_from_prompt(prompt=full_prompt)
+
+    if not image_bytes:
+        raise HTTPException(status_code=500, detail="Failed to generate image AI Servoces!")
+    
+    file_path = f"static/images/{character_id}.png"
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    with open(file_path, "wb") as f:
+        f.write(image_bytes)
+
+    db_character.imagePath = "/" + file_path
+    db.commit()
+    db.refresh(db_character)
+
+    return db_character

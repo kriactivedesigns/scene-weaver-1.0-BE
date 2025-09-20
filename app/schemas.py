@@ -74,3 +74,6 @@ class Character(CharacterBase):
 
     class Config:
         from_attributes = True
+
+class ImageGenerateRequest(BaseModel):
+    prompt: str

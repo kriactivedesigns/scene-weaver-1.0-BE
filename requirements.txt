@@ -13,3 +13,8 @@ pydantic-settings
 
 # For UUIDs and other utilities
 python-dotenv
+
+# Google AI for image generation
+google-generativeai
+
+requests

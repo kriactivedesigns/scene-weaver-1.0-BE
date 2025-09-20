@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
@@ -41,3 +41,14 @@ def read_project(project_id: uuid.UUID, db: Session = Depends(get_db)):
     if db_project is None:
         raise HTTPException(status_code=404, detail="Project not found!")
     return db_project
+
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(project_id: uuid.UUID, db: Session =Depends(get_db)):
+    """
+    Delete a project and all its related data.
+    """
+    success = crud.delete_project(db, project_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

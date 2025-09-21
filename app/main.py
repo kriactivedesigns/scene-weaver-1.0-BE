@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models
@@ -14,6 +15,8 @@ app = FastAPI(
     description="Backend services for the SceneWeaver AI Application",
     version="0.1.0"
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Define the list of allowed origins
 # For development, this includes typical localhost port for frontend frameworks.

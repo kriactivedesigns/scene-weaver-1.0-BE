@@ -7,6 +7,7 @@ import os
 from .... import crud, schemas
 from ....database import SessionLocal
 from .... import ai_srevices
+from .... import prompt_builder
 
 router = APIRouter()
 
@@ -66,7 +67,7 @@ def generate_character_image(
     
     db_project = crud.get_project(db, project_id=db_character.projectId)
 
-    full_prompt = f"{request.prompt}, in a {db_project.visualStyle} style"
+    full_prompt = prompt_builder.build_character_prompt(request.prompt, db_project.visualStyle)
 
     image_bytes = ai_srevices.generate_image_from_prompt(prompt=full_prompt)
 

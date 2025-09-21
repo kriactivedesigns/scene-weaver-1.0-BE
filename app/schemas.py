@@ -8,7 +8,7 @@ class ProjectBase(BaseModel):
     projectName: str
     description: Optional[str] = None
     aspectRatio: Optional[str] = "16:9"
-    visualStyle: Optional[str] = "Tonal Storyboards (Grayscale)"
+    visualStyle: Optional[str] = "Dynamic Line Art (Gesture Drawing)"
 
 # This model is used specifically when creating a new project
 class ProjectCreate(ProjectBase):
@@ -33,11 +33,15 @@ class Project(ProjectBase):
 class WorldBase(BaseModel):
     name: str
     description: Optional[str] = None
+    imagePath: Optional[str] = None
 
 class WorldCreate(WorldBase):
     pass
 
 class WorldUpdate(WorldBase):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    imagePath: Optional[str] = None
     pass
 
 class WorldDelete(WorldBase):
@@ -56,11 +60,15 @@ class World(WorldBase):
 class CharacterBase(BaseModel):
     name: str
     description: Optional[str] = None
+    imagePath: Optional[str] = None
 
 class CharacterCreate(CharacterBase):
     pass
 
 class CharacterUpdate(CharacterBase):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    imagePath: Optional[str] = None
     pass
 
 class CharacterDelete(CharacterBase):

@@ -1,11 +1,11 @@
 1. Create a Virtual Environment
 
-python -m venv venv
+python -m venv swvenv
 
 
 2. Activate the virtual environment:
 
-.\venv\Scripts\activate
+.\swvenv\Scripts\activate
 
 3. Run the Application
 

@@ -1,4 +1,5 @@
 from typing import Optional
+from . import ai_srevices
 
 #Character Prompt Definitions
 CHARACTER_PROMPT_STYLES = {
@@ -29,7 +30,6 @@ def build_character_prompt(description: str, visual_style: Optional[str]) -> str
     """
 
     prompt_template = CHARACTER_PROMPT_STYLES.get(visual_style, DEFAULT_CHARACTER_PROMPT)
-    print(prompt_template.format(description=description))
     return prompt_template.format(description=description)
 
 def build_world_prompt(description: str, visual_style: str) -> str:
@@ -38,3 +38,25 @@ def build_world_prompt(description: str, visual_style: str) -> str:
     """
     prompt_template = WORLD_PROMPT_STYLES.get(visual_style, DEFAULT_WORLD_PROMPT)
     return prompt_template.format(description=description)
+
+def build_modify_character_prompt(original_prompt: str, prompt: str, visual_style: Optional[str]) -> str:
+    """
+    Constructs a detailed character prompt based on the chosen visual style.
+    """
+    prompt = """
+        A modified sketch of the same image, with {prompt}, 
+        maintaining the original artistic style and features.
+        Focus on seamlessly {prompt} without altering the rest of the drawing.
+    """
+    return prompt
+
+def build_modify_world_prompt(original_prompt: str, prompt: str, visual_style: Optional[str]) -> str:
+    """
+    Constructs a detailed character prompt based on the chosen visual style.
+    """
+    prompt = """
+        A modified sketch of the same image, with {prompt}, 
+        maintaining the original artistic style and features.
+        Focus on seamlessly {prompt} without altering the rest of the drawing.
+    """
+    return prompt

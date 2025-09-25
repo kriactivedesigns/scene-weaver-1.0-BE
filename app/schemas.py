@@ -89,7 +89,7 @@ class ImageGenerateRequest(BaseModel):
 # StoryThread schemas
 class StoryThreadBase(BaseModel):
     order: int
-    content: Optional[str]
+    content: Optional[str] = None
 
 class StoryThreadCreate(StoryThreadBase):
     pass
@@ -98,6 +98,26 @@ class StoryThreadUpdate(StoryThreadBase):
     pass
 
 class StoryThread(StoryThreadBase):
+    id: uuid.UUID
+    projectId: uuid.UUID
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+# Story schema
+class StoryBase(BaseModel):
+    title: str
+    content: Optional[str] = None
+
+class StoryCreate(StoryBase):
+    pass
+
+class StoryContentUpdate(BaseModel):
+    content: Optional[str] = None
+
+class Story(StoryBase):
     id: uuid.UUID
     projectId: uuid.UUID
     createdAt: datetime

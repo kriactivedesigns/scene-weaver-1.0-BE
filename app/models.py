@@ -24,8 +24,8 @@ class Project(Base):
 
     worlds = relationship("World", back_populates="project", cascade="all, delete-orphan")
     characters = relationship("Character", back_populates="project", cascade="all, delete-orphan")
-    storyThreads = relationship("StoryThread", back_populates="project", cascade="all, delete-orphan")
-    stories = relationship("Story", back_populates="project", cascade="all, delete-orphan")
+    storyThreads = relationship("StoryThread", back_populates="project", uselist=False, cascade="all, delete-orphan")
+    story = relationship("Story", back_populates="project", cascade="all, delete-orphan")
     screenplayScenes = relationship("ScreenplayScene", back_populates="project", cascade="all, delete-orphan")
 
 class World(Base):
@@ -66,14 +66,13 @@ class StoryThread(Base):
 class Story(Base):
     __tablename__ = "Stories"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False)
+    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False, unique=True)
     title = Column(String(255), nullable=False)
     content = Column(Text)
-    version = Column(Integer, nullable=False, default=1)
     createdAt = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updatedAt = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
 
-    project = relationship("Project", back_populates="stories")
+    project = relationship("Project", back_populates="story", uselist=False)
 
 class ScreenplayScene(Base):
     __tablename__ = "ScreenplayScenes"

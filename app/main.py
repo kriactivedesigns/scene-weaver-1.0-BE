@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import models
 from .database import engine
-from .api.v1.endpoints import projects, worlds, characters, storythread # Import projects router
+from .api.v1.endpoints import projects, worlds, characters, storythread, story # Import projects router
 
 # This line creates all the database tables based on the SQLAlchemy Models
 # For Production environment, we will want to manage this with migrations (Alembic).
@@ -61,7 +61,14 @@ app.include_router(
 app.include_router(
     storythread.router,
     prefix="/api/v1",
-    tags=["StoryThread"]
+    tags=["Story Thread"]
+)
+
+# Include the router for Story 
+app.include_router(
+    story.router,
+    prefix="/api/v1",
+    tags=["Story"]
 )
 
 @app.get("/")

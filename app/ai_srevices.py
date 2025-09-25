@@ -1,6 +1,8 @@
 import os
 import logging
+from typing import Dict, Any
 from vertexai.preview.vision_models import Image, ImageGenerationModel
+from vertexai.generative_models import GenerativeModel
 from google import genai
 from google.genai.types import GenerateImagesConfig
 from dotenv import load_dotenv
@@ -80,8 +82,6 @@ def edit_image_from_prompt(prompt: str, original_image_path: str) -> bytes | Non
     
     model = ImageGenerationModel.from_pretrained("imagegeneration@002")
     base_image = Image.load_from_file(location=original_image_path)
-    logger.info(original_image_path)
-    logger.info(base_image)
     logger.info(f"Re-generating image for editing with new prompt.")
 
     response = model.edit_image(
@@ -104,3 +104,38 @@ def edit_image_from_prompt(prompt: str, original_image_path: str) -> bytes | Non
         logger.error(f"An error occurred during image generation: {e}")
         return None
     
+def generate_story_from_project_context(project_context: Dict[str, Any]) -> str:
+    """
+    Constructs a prompt from the provided context, calls Vertex AI,
+    and returns the generated story as formatted text.
+    
+    This function does NOT interact with the database.
+    """
+    # 1. Build the prompt from the context dictionary
+    threads_text = "\\n".join(f"- {thread.content}" for thread in project_context["threads"])
+    characters_text = "\\n".join(f"- **{char.name}:** {char.description}" for char in project_context["characters"])
+    worlds_text = "\\n".join(f"- **{world.name}:** {world.description}" for world in project_context["worlds"])
+
+    prompt = f"""
+                You are an expert storyteller. Your task is to write a cohesive and compelling story
+                in Markdown format based on the provided project elements.
+
+                **Project Title:** {project_context["project"].projectName}
+
+                **World & Setting:**
+                {worlds_text}
+
+                **Main Characters:**
+                {characters_text}
+
+                **Core Plot Points & Ideas (in order):**
+                {threads_text}
+
+                Please generate a rich narrative that creatively weaves all these elements together.
+                The story must be returned as a single block of well-formatted Markdown text,
+                starting with a title (e.g., # My Story Title).
+            """
+    model = GenerativeModel("gemini-2.5-pro")
+    response = model.generate_content(prompt)
+    logger.info(response.text.strip()[:80])
+    return response.text.strip()

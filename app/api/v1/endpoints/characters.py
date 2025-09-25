@@ -100,8 +100,7 @@ def delete_character(character_id: uuid.UUID, db: Session = Depends(get_db)):
                 print(f"Error deleting file {relative_file_path}: {e}")
 
     # Finally, delete the character record from the database
-    db.delete(db_character)
-    db.commit()
+    crud.delete_character(db=db, character_id=character_id)
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

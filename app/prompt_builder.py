@@ -1,5 +1,8 @@
 from typing import Optional
-from . import ai_srevices
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 #Character Prompt Definitions
 CHARACTER_PROMPT_STYLES = {

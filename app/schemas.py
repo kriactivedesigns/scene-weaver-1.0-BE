@@ -85,3 +85,23 @@ class Character(CharacterBase):
 
 class ImageGenerateRequest(BaseModel):
     prompt: str
+
+# StoryThread schemas
+class StoryThreadBase(BaseModel):
+    order: int
+    content: Optional[str]
+
+class StoryThreadCreate(StoryThreadBase):
+    pass
+
+class StoryThreadUpdate(StoryThreadBase):
+    pass
+
+class StoryThread(StoryThreadBase):
+    id: uuid.UUID
+    projectId: uuid.UUID
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True

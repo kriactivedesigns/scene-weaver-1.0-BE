@@ -125,3 +125,29 @@ class Story(StoryBase):
 
     class Config:
         from_attributes = True
+
+class ScreenplaySceneBase(BaseModel):
+    sceneNumber: int
+    duration: int
+    content: Optional[str] = None
+
+class ScreenplaySceneCreate(ScreenplaySceneBase):
+    pass
+
+class NewScreenplayScene(BaseModel):
+    duration: int = 0
+    content: str = ""
+
+class ScreenplaySceneUpdate(BaseModel):
+    sceneNumber: Optional[int] = None
+    duration: Optional[int] = None
+    content: Optional[str] = None
+
+class ScreenplayScene(ScreenplaySceneBase):
+    id: uuid.UUID
+    projectId: uuid.UUID
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True

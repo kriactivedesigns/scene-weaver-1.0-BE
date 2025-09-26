@@ -23,3 +23,6 @@ requests
 
 #Markdown-to-HTML Conversion
 markdown2
+
+#Sanitize HTML Content
+beautifulsoup4

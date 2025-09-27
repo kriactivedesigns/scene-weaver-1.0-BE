@@ -1,8 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
-from typing import List
 import uuid
-import os
 
 from .... import crud, schemas
 from ....database import SessionLocal

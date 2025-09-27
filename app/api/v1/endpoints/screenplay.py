@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from bs4 import BeautifulSoup
 from typing import List
 import uuid
-import os
 
 from .... import crud, schemas
 from ....database import SessionLocal

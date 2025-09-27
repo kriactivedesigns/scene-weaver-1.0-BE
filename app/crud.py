@@ -1,9 +1,13 @@
 from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from bs4 import BeautifulSoup
 from . import models, schemas
 import uuid
 import markdown2
+import os
+
+from . import ai_srevices
 
 # Project CRUD functions
 def get_project(db: Session, project_id: uuid.UUID):
@@ -131,6 +135,7 @@ def delete_storythread(db: Session, storythread_id: uuid.UUID) -> bool:
         return True
     return False
 
+# Story Crud functions
 def crate_or_update_story_for_project(db: Session, story: schemas.StoryCreate, project_id: uuid.UUID):
     """
     Finds the story for the project. If it exists, updates it. 
@@ -208,6 +213,7 @@ def get_worlds_for_project(db: Session, project_id: uuid.UUID) -> List[models.Wo
     # Assuming you have a 'World' model defined
     return db.query(models.World).filter(models.World.projectId == project_id).all()
 
+# Screenplay Crud functions
 def create_screenplay_scenes_for_project(db: Session, scenes: List[schemas.ScreenplaySceneCreate], project_id: uuid.UUID) -> List[models.ScreenplayScene]:
     """
     Deletes all existing screenplay scenes for a project and creates a new set.
@@ -314,3 +320,99 @@ def delete_scene_and_reorder(db: Session, scene_id: uuid.UUID) -> bool:
         .all()
     
     return updated_scenes
+
+# Storyboard Crud functions
+def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_id: uuid.UUID) -> models.StoryboardImage:
+    """
+    Orchestrates the entire process of creating a single storyboard image.
+    """
+    scene = db.query(models.ScreenplayScene).filter(models.ScreenplayScene.id == scene_id).first()
+    if not scene:
+        raise ValueError("Scene not found")
+
+    soup = BeautifulSoup(scene.content or "", "html.parser")
+    plain_text_scene = soup.get_text(separator=" ", strip=True)
+    
+    entities = ai_srevices.extract_entities_from_scene(plain_text_scene)
+
+    print("entities", entities)
+
+    character_names_lower = [name.lower() for name in entities.get("characters", [])]
+    world_names_lower = [name.lower() for name in entities.get("worlds", [])]
+
+    character_paths_from_db = [
+        char.imagePath for char in 
+        db.query(models.Character).filter(
+            models.Character.projectId == project_id,
+            func.lower(models.Character.name).in_(character_names_lower)
+        ).all()
+    ]
+
+    world_paths_from_db = [
+        world.imagePath for world in 
+        db.query(models.World).filter(
+            models.World.projectId == project_id,
+            func.lower(models.World.name).in_(world_names_lower)
+        ).all()
+    ]
+
+    character_paths = [
+        path.lstrip('/') for path in character_paths_from_db
+    ]
+    world_paths = [
+        path.lstrip('/') for path in world_paths_from_db
+    ]
+
+    print("character paths",character_paths)
+    print("world paths",world_paths)
+
+    final_prompt = f"Cinematic storyboard image depicting: {plain_text_scene}"
+
+    if not final_prompt:
+        scene_text = plain_text_scene.strip() if plain_text_scene else ""
+        if scene_text:
+            final_prompt = f"Cinematic storyboard image depicting: {scene_text}"
+    
+    if not final_prompt:
+        final_prompt = "A visually interesting, high-quality cinematic storyboard image."
+
+    image_bytes = ai_srevices.generate_storyboard_image_from_references(final_prompt, character_paths, world_paths)
+
+    storyboard_id = uuid.uuid4()
+    image_path = os.path.join(f"static/images/{storyboard_id}.png")
+    with open(image_path, "wb") as f:
+        f.write(image_bytes)
+
+    db_storyboard = db.query(models.StoryboardImage).filter(models.StoryboardImage.sceneId == scene_id).first()
+    if db_storyboard:
+        # Update existing storyboard
+        db_storyboard.imagePath = image_path
+        db_storyboard.prompt = final_prompt
+        db_storyboard.version += 1
+    else:
+        # Create new storyboard
+        db_storyboard = models.StoryboardImage(
+            id=storyboard_id,
+            projectId=project_id,
+            sceneId=scene_id,
+            aspectRatio="16:9", # Default or from request
+            prompt=final_prompt,
+            imagePath=image_path
+        )
+        db.add(db_storyboard)
+
+    db.commit()
+    db.refresh(db_storyboard)
+    
+    return db_storyboard
+
+def get_storyboards_by_project(db: Session, project_id: uuid.UUID) -> List[models.StoryboardImage]:
+    """
+    Retrieves all storyboard images for a given project, ordered by the scene number
+    of their associated screenplay scene.
+    """
+    return db.query(models.StoryboardImage)\
+        .join(models.ScreenplayScene, models.StoryboardImage.sceneId == models.ScreenplayScene.id)\
+        .filter(models.StoryboardImage.projectId == project_id)\
+        .order_by(models.ScreenplayScene.sceneNumber)\
+        .all()

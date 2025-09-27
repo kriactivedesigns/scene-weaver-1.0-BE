@@ -1,12 +1,12 @@
 import json
 import os
 import logging
+from pathlib import Path
 import re
-from typing import Dict, Any
+from typing import List, Dict, Any
 from vertexai.preview.vision_models import Image, ImageGenerationModel
-from vertexai.generative_models import GenerativeModel, GenerationConfig
-from google import genai
-from google.genai.types import GenerateImagesConfig
+from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
+# from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,35 +14,37 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def get_ai_client():
-    """
-    Initializes and returns the Google GenAI Client for Vertex AI,
-    checking for necessary environment variables and authentication.
-    """
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    location = os.getenv("GOOGLE_CLOUD_LOCATION")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-    # Check if essential environment variables are set
-    if not project_id or not location:
-        logger.error("Error: Environment variables GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION must be set.")
-        return None
+# def get_ai_client():
+#     """
+#     Initializes and returns the Google GenAI Client for Vertex AI,
+#     checking for necessary environment variables and authentication.
+#     """
+#     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+#     location = os.getenv("GOOGLE_CLOUD_LOCATION")
 
-    try:
-        # Explicitly initialize the client for Vertex AI
-        # This uses your application-default credentials from the gcloud login
-        client = genai.Client(
-            vertexai=True,
-            project=project_id,
-            location=location
-        )
-        logger.info("Successfully initialized Google GenAI Client for Vertex AI.")
-        return client
-    except Exception as e:
-        logger.error(f"Failed to initialize Google GenAI Client: {e}")
-        logger.error("Please ensure you have authenticated via 'gcloud auth application-default login'.")
-        return None
+#     # Check if essential environment variables are set
+#     if not project_id or not location:
+#         logger.error("Error: Environment variables GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION must be set.")
+#         return None
+
+#     try:
+#         # Explicitly initialize the client for Vertex AI
+#         # This uses your application-default credentials from the gcloud login
+#         client = genai.Client(
+#             vertexai=True,
+#             project=project_id,
+#             location=location
+#         )
+#         logger.info("Successfully initialized Google GenAI Client for Vertex AI.")
+#         return client
+#     except Exception as e:
+#         logger.error(f"Failed to initialize Google GenAI Client: {e}")
+#         logger.error("Please ensure you have authenticated via 'gcloud auth application-default login'.")
+#         return None
     
-client = get_ai_client()
+# client = get_ai_client()
 
 def generate_image_from_prompt(prompt: str, aspect_ratio: str) -> bytes:
     """
@@ -54,20 +56,16 @@ def generate_image_from_prompt(prompt: str, aspect_ratio: str) -> bytes:
 
     try:
         logger.info(f"Generating image with prompt: '{prompt[:80]}...'")
-        # Use the generate_images method specifically for Imagen models
-        response = client.models.generate_images(
-            model="imagen-4.0-generate-001",  # A powerful and recent model
+        model = ImageGenerationModel.from_pretrained("imagen-4.0-generate-001")
+        response = model.generate_images(
             prompt=prompt,
-            config=GenerateImagesConfig(
-                number_of_images=1,
-                image_size="1k",
-                aspect_ratio=aspect_ratio
-            ),
+            number_of_images=1,
+            aspect_ratio=aspect_ratio
         )
 
-        if response.generated_images:
+        if response.images[0]:
             logger.info("Image generated successfully.")
-            return response.generated_images[0].image.image_bytes
+            return response.images[0]._image_bytes
         else:
             logger.warning("AI service returned no images for the prompt.")
             return None
@@ -218,3 +216,69 @@ def generate_scenes_from_story(story_content: str) -> list[Dict[str, Any]]:
     except (json.JSONDecodeError, ValueError) as e:
         print(f"Error parsing AI response: {e}")
         return []
+    
+def extract_entities_from_scene(scene_content: str) -> Dict[str, List[str]]:
+    """
+    Uses a text model to extract character and world names from scene content.
+    """
+    prompt = f"""
+        You are a script analyst. Read the following screenplay scene and identify all characters and locations mentioned.
+        Return your answer as a single, valid JSON object with two keys: "characters" and "worlds".
+
+        Scene Text: {scene_content}
+
+        Your JSON output:
+    """
+    model = GenerativeModel("gemini-2.5-flash")
+    config = GenerationConfig(response_mime_type="application/json")
+    
+    try:
+        response = model.generate_content(prompt, generation_config=config)
+        # Simple cleaning in case the model wraps the response
+        cleaned_text = re.sub(r"^``````$", "", response.text, flags=re.MULTILINE)
+        return json.loads(cleaned_text)
+    except Exception as e:
+        print(f"Error extracting entities: {e}")
+        return {"characters": [], "worlds": []}
+    
+def generate_storyboard_image_from_references(prompt: str, character_image_paths: List[str], world_image_paths: List[str]) -> bytes:
+    """
+    Generates an image using reference images and a text prompt.
+    Returns the image data as bytes.
+    """
+    llm_model = GenerativeModel("gemini-2.5-flash")
+    system_instruction = "Analyze the provided images and the scene description. Generate a single, highly detailed, cinematic text prompt that incorporates the style and character likenesses from the images to render the scene."
+    full_text_prompt_for_llm = f"{system_instruction}\n\nScene Description: {prompt}"
+    text_part = Part.from_text(full_text_prompt_for_llm)
+
+    image_parts = []
+    all_original_image_paths  = character_image_paths + world_image_paths
+    for original_image_path in all_original_image_paths:
+        image = Image.load_from_file(location=original_image_path)
+        image_part = Part.from_data(data=image._image_bytes, mime_type="image/png")
+        image_parts.append(image_part)
+            
+    gemini_prompt_parts = [text_part] + image_parts
+
+    llm_response = llm_model.generate_content(gemini_prompt_parts)
+    final_text_prompt = llm_response.text.strip()
+
+    image_gen_model = ImageGenerationModel.from_pretrained("imagen-4.0-generate-001")
+
+    try:
+        response = image_gen_model.generate_images(
+            prompt=final_text_prompt,
+            number_of_images=1,
+            aspect_ratio='16:9'
+        )
+
+        if response.images:
+            print("image generated", response.images[0]._image_bytes[:20])
+            return response.images[0]._image_bytes
+        else:
+            raise ValueError("AI model did not return any images.")
+        
+    except Exception as e:
+        # It's crucial to log the specific error from the AI service
+        print(f"Error during image generation with Vertex AI: {e}")
+        raise

@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 import uuid
-
-from .... import crud, schemas
+from .... import schemas
 from ....database import SessionLocal
 from .... import ai_services
+from ..crud.projects import get_project
+from ..crud.story import get_story_for_project, crate_or_update_story_for_project, get_story, update_story, delete_story
+from ..crud.story import get_characters_for_project, get_storythreads_for_project, get_worlds_for_project
 
 router = APIRouter()
 
@@ -21,13 +23,13 @@ def generate_story(project_id: uuid.UUID, db: Session = Depends(get_db)):
     Generates a new story. If a story already exists for this project,
     it will be overwritten with the new content.
     """
-    project = crud.get_project(db, project_id=project_id) # Verify project exists
+    project = get_project(db, project_id=project_id) # Verify project exists
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    threads = crud.get_storythreads_for_project(db=db, project_id=project_id)
-    characters = crud.get_characters_for_project(db=db, project_id=project_id)
-    worlds = crud.get_worlds_for_project(db=db, project_id=project_id)
+    threads = get_storythreads_for_project(db=db, project_id=project_id)
+    characters = get_characters_for_project(db=db, project_id=project_id)
+    worlds = get_worlds_for_project(db=db, project_id=project_id)
 
     project_context = {
         "project": project,
@@ -47,7 +49,7 @@ def generate_story(project_id: uuid.UUID, db: Session = Depends(get_db)):
         title = project.projectName
         
         story_data = schemas.StoryCreate(title=title, content=generated_story)
-        db_story = crud.crate_or_update_story_for_project(db=db, story=story_data, project_id=project_id)
+        db_story = crate_or_update_story_for_project(db=db, story=story_data, project_id=project_id)
         return db_story
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate story: {str(e)}")
@@ -55,7 +57,7 @@ def generate_story(project_id: uuid.UUID, db: Session = Depends(get_db)):
 @router.get("/projects/{project_id}/story", response_model=schemas.Story)
 def read_story_of_project(project_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retrieve the single story for a specific project."""
-    db_story = crud.get_story_for_project(db=db, project_id=project_id)
+    db_story = get_story_for_project(db=db, project_id=project_id)
     if db_story is None:
         raise HTTPException(status_code=404, detail="Story not found")
     return db_story
@@ -63,7 +65,7 @@ def read_story_of_project(project_id: uuid.UUID, db: Session = Depends(get_db)):
 @router.get("/stories/{story_id}", response_model=schemas.Story)
 def read_story(story_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retrieve a single story by its ID."""
-    db_story = crud.get_story(db, story_id=story_id)
+    db_story = get_story(db, story_id=story_id)
     if db_story is None:
         raise HTTPException(status_code=404, detail="Story not found")
     return db_story
@@ -71,7 +73,7 @@ def read_story(story_id: uuid.UUID, db: Session = Depends(get_db)):
 @router.put("/stories/{story_id}", response_model=schemas.Story)
 def update_story(story_id: uuid.UUID, story: schemas.StoryContentUpdate, db: Session = Depends(get_db)):
     """Update a story's title or content."""
-    db_story = crud.update_story(db=db, story_id=story_id, story=story)
+    db_story = update_story(db=db, story_id=story_id, story=story)
     if db_story is None:
         raise HTTPException(status_code=404, detail="Story not found")
     return db_story
@@ -79,7 +81,7 @@ def update_story(story_id: uuid.UUID, story: schemas.StoryContentUpdate, db: Ses
 @router.delete("/stories/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_story(story_id: uuid.UUID, db: Session = Depends(get_db)):
     """Delete a story by its ID."""
-    was_deleted = crud.delete_story(db=db, story_id=story_id)
+    was_deleted = delete_story(db=db, story_id=story_id)
     if not was_deleted:
         raise HTTPException(status_code=404, detail="Story not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)

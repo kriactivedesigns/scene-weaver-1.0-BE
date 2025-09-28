@@ -2,10 +2,11 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 import uuid
-from .... import  schemas, crud
+from .... import  schemas
 from ....database import SessionLocal
 from ....services.task_manager import job_manager, run_animatic_generation_task
 from ....services.connection_manager import manager
+from ..crud.animatics import get_animatics_by_project
 
 router = APIRouter()
 
@@ -60,5 +61,5 @@ def get_project_animatics(project_id: uuid.UUID, db: Session = Depends(get_db)):
     Retrieves all existing animatic scenes for a specific project,
     ordered by scene number.
     """
-    animatic_scenes = crud.get_animatics_by_project(db=db, project_id=project_id)
+    animatic_scenes = get_animatics_by_project(db=db, project_id=project_id)
     return animatic_scenes

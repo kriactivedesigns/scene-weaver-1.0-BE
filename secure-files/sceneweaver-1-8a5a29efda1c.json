@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "sceneweaver-1",
+  "private_key_id": "8a5a29efda1c7b456c2380fc6f3dedb138aa6e0a",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCqzyil36IJ5jr5\nWCE1tkWGAYBUJhgh/nIHYeEobdiGaVrGdrzzbriWm+z32QYLQf8eOSY4kCUxeNTu\n/adsXSbh91NU8jkivTu/dUpcH2sTmwaq1FUbwKM/SiSnjpslDKqaw2KVEuIG01Jp\np3vpTjPAp3kzcAfMCpSQqyC9n3qhBcKU9KXLEP1MgloC89vcOiG5UUthbmgZCVKk\nACq6kmTFunhOAn0fcLzmcycLAgygMQUJZTRAiKCw2DC29cv6siaxLQ051795XHjV\n3QrF1I1JQndQF4LeGapkk7/7rs7U11b+GDlnIkcIlkDrDxn3isjQE5Y47VTjCntW\nN+JjjifBAgMBAAECggEANtssE0WEnUhHBWBD3iOpJVXjGGNZmcVFatCJBrpscRJx\n2E429blH5/qwupKE6eWqoNK6zyyf/UjwncZx2A/8llKffScDqX/7qcvp8zcV5OiD\nVia2JKET7JYLupJGijoMqoJ4bSbw1z9T9uGWnoGChmtitd3Tazi0qNeEvtFyiTaw\n2UyzcB7YVGoHVE4sG77BtIbWhObseQd3YIGT7Mt1y3yznjILWZ5SToomOE6UxRM3\nvZoUOk5imMRttUUxH59guzwQtmaSRrROob8gj4VLupXDnRDd6hwCmpgFWfu0K5gv\n0GZVEgdCLsvBxqp6naGDclwz99JNIhWUjDwTwTf0NwKBgQDnih4/NjjQhL2Djtji\nKVF1nXHxl9n2WXD2MDPsONighlccE9vBW22bWz2rLmytTBTFEAsPhr+696ipjZI6\nYTaNNd7LRjpo1vsp+jfVZtrzIzaNzk5yKLlwMUqECz19qSl3tbrLDOIqyQq2SYi6\nsApq4f3NorU/rE9mbR8tnrDcEwKBgQC82p3oLITtFfjvT4HKO+CujNj+ufm4hOpp\n5IsAu4sv+1FxZFe4IIDfZzzL9I8hwGv0v4/ejYpkn7Kmr4eHo+y5FGW27Fse/178\npdn610yDmAaYMYvsGrZpWUs3pUl5tMaZwhP2Bqmb/TWBhAhd1KByH0CGuulVlONF\nyJh1v8P/WwKBgEVwt+ePVHS9CrVU9xjE+YhDovOo7hai9mzvQfM7jUR/Zcqm7gZM\nbE/milU3hCJpKeV8DUUnzYK+WdgX/F4D3790A5CFTGk66HLLd0lKIqo+ylK3J/G2\n4v6R2d5GHLf+LtCXMSFKiN36E3teDGKo/0bU5jBw9tjUza9TVMFy0Wn/AoGBAJIq\nVdrTUhI5VlDJ5XdDfrM6GdyUzf0NCmzo0NjBTonVZoRvmCDPL085FOn6HymNR0DH\nXq9uNvWIUHoIEspdiiL48XxxVFkaZ0b9ikdFiVe0Oy5h8pzLU/EXhkrMJ6EF1Ew+\n1LovD+jGQjo6mUsd/Qw2ufdNBLkTIg/poG5J/IVPAoGBALjzJ8jF6fEo8A5lMNB4\nGWVHiEpFbf7bDmlPr5TAVAJ4+OIeg+BsnhSKMg9Oa1R4V8bN9A65ZGao9MPautfF\nZf1btTwDu5HgG/0gLm08dKdH7hvgTMx1jr/BLrX5M68Ar7jfDzFB1TXE495//J4V\nbfLJuDu2Fn/rzo2GWtVkGmM1\n-----END PRIVATE KEY-----\n",
+  "client_email": "sceneweaver-storage-manager@sceneweaver-1.iam.gserviceaccount.com",
+  "client_id": "102361134982173803736",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/sceneweaver-storage-manager%40sceneweaver-1.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

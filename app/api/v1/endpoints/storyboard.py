@@ -1,11 +1,12 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect, Response
 from sqlalchemy.orm import Session
 import uuid
-from .... import  schemas, crud
+from .... import  schemas
 from ....database import SessionLocal
 from ....services.task_manager import job_manager, run_storyboard_generation_task
 from ....services.connection_manager import manager
+from ..crud.storyboard import get_storyboards_by_project, delete_storyboard
 
 router = APIRouter()
 
@@ -17,7 +18,7 @@ def get_db():
         db.close()
 
 @router.post("/projects/{project_id}/storyboards/generate", status_code=status.HTTP_202_ACCEPTED)
-def generate_project_storyboards(project_id: uuid.UUID, request: schemas.StoryboardsGenerate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def generate_project_storyboards(project_id: uuid.UUID, request: schemas.StoryboardsGenerate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Starts an asynchronous job to generate storyboards for the specified scene IDs.
     """
@@ -61,5 +62,15 @@ def get_project_storyboards(project_id: uuid.UUID, db: Session = Depends(get_db)
     Retrieves all existing storyboard images for a specific project,
     ordered by scene number.
     """
-    storyboard_images = crud.get_storyboards_by_project(db=db, project_id=project_id)
+    storyboard_images = get_storyboards_by_project(db=db, project_id=project_id)
     return storyboard_images
+
+@router.delete("/storyboards/{storyboard_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_storyboard_endpoint(storyboard_id: uuid.UUID, db: Session = Depends(get_db)):
+    """
+    Deletes a single storyboard image and its associated assets from GCS.
+    """
+    was_deleted = delete_storyboard(db=db, storyboard_id=storyboard_id)
+    if not was_deleted:
+        raise HTTPException(status_code=404, detail="Storyboard not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

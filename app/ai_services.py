@@ -6,15 +6,12 @@ import re
 from typing import List, Dict, Any
 from vertexai.preview.vision_models import ImageGenerationModel
 from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
-
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 import time
 import asyncio
-
 from dotenv import load_dotenv
-from .services.image_helper import load_image
 
 load_dotenv()
 
@@ -56,25 +53,25 @@ def generate_image_from_prompt(prompt: str, aspect_ratio: str) -> bytes:
         logger.error(f"An error occurred during image generation: {e}")
         return None
 
-def edit_image_from_prompt(prompt: str, original_image_path: str) -> bytes | None:
+def edit_image_from_prompt(prompt: str, original_image_bytes: bytes) -> bytes | None:
     """
     Placeholder for modifying an existing image.
     For now, regenerates the image with a new combined prompt.
     """
     
     model = ImageGenerationModel.from_pretrained("imagegeneration@002")
-    base_image = load_image(original_image_path)
+    base_image = load_image(original_image_bytes)
     logger.info(f"Re-generating image for editing with new prompt.")
 
-    response = model.edit_image(
-        base_image=base_image,
-        prompt=prompt,
-        seed=1,
-        guidance_scale=21,
-        number_of_images=1
-    )
-
     try:
+        response = model.edit_image(
+            base_image=base_image,
+            prompt=prompt,
+            seed=1,
+            guidance_scale=21,
+            number_of_images=1
+        )
+
         if response.images[0]:
             logger.info("Image generated successfully.")
             return response.images[0]._image_bytes
@@ -223,12 +220,12 @@ def extract_entities_from_scene(scene_content: str) -> Dict[str, List[str]]:
         print(f"Error extracting entities: {e}")
         return {"characters": [], "worlds": []}
     
-def generate_storyboard_image_from_references(prompt: str, character_image_paths: List[str], world_image_paths: List[str]) -> bytes:
+async def generate_storyboard_image_from_references(prompt: str, character_image_paths: List[str], world_image_paths: List[str]) -> bytes:
     """
     Generates an image using reference images and a text prompt.
     Returns the image data as bytes.
     """
-    llm_model = GenerativeModel(os.getenv("LLM_MODEL", "gemini-2.5-flash"))
+    llm_model = GenerativeModel(os.getenv("LLM_MODEL"))
     system_instruction = "Analyze the provided images and the scene description. Generate a single, highly detailed, cinematic text prompt that incorporates the style and character likenesses from the images to render the scene."
     full_text_prompt_for_llm = f"{system_instruction}\n\nScene Description: {prompt}"
     text_part = Part.from_text(full_text_prompt_for_llm)
@@ -245,10 +242,11 @@ def generate_storyboard_image_from_references(prompt: str, character_image_paths
     llm_response = llm_model.generate_content(gemini_prompt_parts)
     final_text_prompt = llm_response.text.strip()
 
-    image_gen_model = ImageGenerationModel.from_pretrained(os.getenv("IMAGE_GENERATION_MODEL", "imagen-4.0-generate-001"))
+    image_gen_model = ImageGenerationModel.from_pretrained(os.getenv("IMAGE_GENERATION_MODEL"))
 
     try:
-        response = image_gen_model.generate_images(
+        response = await asyncio.to_thread(
+            image_gen_model.generate_images,
             prompt=final_text_prompt,
             number_of_images=1,
             aspect_ratio='16:9'

@@ -1,9 +1,11 @@
 import uuid
 import asyncio
-from typing import List, Optional, Dict
+from typing import List, Dict
 from sqlalchemy.orm import Session
 from .connection_manager import manager
-from .. import crud, schemas
+from .. import schemas
+from ..api.v1.crud.storyboard import create_storyboard_for_scene
+from ..api.v1.crud.animatics import create_animatics_for_scene
 
 # In-memory job store - replace with Redis for production
 job_manager: Dict[str, Dict] = {}
@@ -21,7 +23,7 @@ async def run_storyboard_generation_task(job_id: str, project_id: uuid.UUID, sce
             break
         
         try:
-            storyboard = crud.create_storyboard_for_scene(db, project_id, scene_id)
+            storyboard = await create_storyboard_for_scene(db, project_id, scene_id)
             # Directly await the async send_json method
             await manager.send_json(job_id, {
                 "event": "IMAGE_GENERATED",
@@ -49,7 +51,7 @@ async def run_animatic_generation_task(job_id: str, project_id: uuid.UUID, scene
         try:
             print(f"[{i}/{total_scenes}] Generating animatic for scene: {scene_id}")
             # Call the corresponding CRUD function for animatics
-            animatic = await crud.create_animatics_for_scene(
+            animatic = await create_animatics_for_scene(
                 db,
                 project_id,
                 scene_id

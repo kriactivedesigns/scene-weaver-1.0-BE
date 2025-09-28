@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from bs4 import BeautifulSoup
 from typing import List
 import uuid
-
-from .... import crud, schemas
+from .... import schemas
 from ....database import SessionLocal
 from .... import ai_services
+from ..crud.screenplay import create_screenplay_scenes_for_project, get_screenlay_scenes_for_project, add_new_scene_to_project, update_screenplay_scene, delete_scene_and_reorder
+from ..crud.story import get_story_for_project
 
 router = APIRouter()
 
@@ -24,7 +25,7 @@ def generate_screenplay(project_id: uuid.UUID, db: Session = Depends(get_db)):
     existing scenes for this project.
     """
     # 1. Fetch the project's story
-    story = crud.get_story_for_project(db=db, project_id=project_id)
+    story = get_story_for_project(db=db, project_id=project_id)
     if not story or not story.content:
         raise HTTPException(status_code=404, detail="A story with content must exist for this project before generating a screenplay.")
     
@@ -41,7 +42,7 @@ def generate_screenplay(project_id: uuid.UUID, db: Session = Depends(get_db)):
     validated_scenes = [schemas.ScreenplaySceneCreate(**data) for data in scenes_data]
     
     # 5. Save the new scenes to the database
-    new_scenes = crud.create_screenplay_scenes_for_project(db=db, scenes=validated_scenes, project_id=project_id)
+    new_scenes = create_screenplay_scenes_for_project(db=db, scenes=validated_scenes, project_id=project_id)
     return new_scenes
 
 @router.post("/projects/{project_id}/screenplayscenes", response_model=schemas.ScreenplayScene, status_code=status.HTTP_201_CREATED)
@@ -51,7 +52,7 @@ def add_new_scene(project_id: uuid.UUID, scene_data: schemas.NewScreenplayScene,
     The sceneNumber is calculated automatically by the server.
     """
     # Call the CRUD function to handle the database logic
-    new_scene = crud.add_new_scene_to_project(db=db, scene_data=scene_data, project_id=project_id)
+    new_scene = add_new_scene_to_project(db=db, scene_data=scene_data, project_id=project_id)
     return new_scene
 
 @router.patch("/screenplayscenes/{scene_id}", response_model=schemas.ScreenplayScene)
@@ -59,7 +60,7 @@ def update_screenplay_scene(scene_id: uuid.UUID, scene_update: schemas.Screenpla
     """
     Update a single screenplay scene's content, duration, or scene number.
     """
-    db_scene = crud.update_screenplay_scene(db=db, scene_id=scene_id, scene=scene_update)
+    db_scene = update_screenplay_scene(db=db, scene_id=scene_id, scene=scene_update)
     if db_scene is None:
         raise HTTPException(status_code=404, detail="Screenplay scene not found")
         
@@ -68,7 +69,7 @@ def update_screenplay_scene(scene_id: uuid.UUID, scene_update: schemas.Screenpla
 @router.get("/projects/{project_id}/screenplay", response_model=List[schemas.ScreenplayScene])
 def get_screenplay(project_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retrieve all scenes for a project's screenplay."""
-    return crud.get_screenlay_scenes_for_project(db=db, project_id=project_id)
+    return get_screenlay_scenes_for_project(db=db, project_id=project_id)
 
 @router.delete("/screenplayscenes/{scene_id}", response_model=List[schemas.ScreenplayScene])
 def delete_screenplay_scene(scene_id: uuid.UUID, db: Session = Depends(get_db)):
@@ -76,7 +77,7 @@ def delete_screenplay_scene(scene_id: uuid.UUID, db: Session = Depends(get_db)):
     Deletes a screenplay scene and re-orders the remaining scenes.
     Returns the complete, updated list of scenes for the project.
     """
-    updated_scenes = crud.delete_scene_and_reorder(db=db, scene_id=scene_id)
+    updated_scenes = delete_scene_and_reorder(db=db, scene_id=scene_id)
     
     if updated_scenes is None:
         raise HTTPException(status_code=404, detail="Screenplay scene not found")

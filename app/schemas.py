@@ -171,3 +171,29 @@ class StoryboardImage(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Animatics Schema
+class AnimaticsSceneBase(BaseModel):
+    duration: int
+    aspectRatio: str
+    videoPath: str
+    version: int
+
+class AnimaticsSceneCreate(BaseModel):
+    pass
+
+class AnimaticsSceneUpdate(BaseModel):
+    duration: Optional[int] = None
+
+class AnimaticsGenerateRequest(BaseModel):
+    scene_ids: list[uuid.UUID]
+
+class AnimaticsScene(AnimaticsSceneBase):
+    id: uuid.UUID
+    projectId: uuid.UUID
+    sceneId: uuid.UUID
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True

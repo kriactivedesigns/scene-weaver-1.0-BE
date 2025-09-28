@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import models
 from .database import engine
-from .api.v1.endpoints import projects, worlds, characters, storythread, story, screenplay, storyboard # Import projects router
+from .api.v1.endpoints import projects, worlds, characters, storythread, story, screenplay, storyboard, animatics # Import projects router
 
 # This line creates all the database tables based on the SQLAlchemy Models
 # For Production environment, we will want to manage this with migrations (Alembic).
@@ -83,6 +83,13 @@ app.include_router(
     storyboard.router,
     prefix="/api/v1",
     tags=["Storyboard"]
+)
+
+# Include the router for Animatics Scenes
+app.include_router(
+    animatics.router,
+    prefix="/api/v1",
+    tags=["Animatics"]
 )
 
 @app.get("/")

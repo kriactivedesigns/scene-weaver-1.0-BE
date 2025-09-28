@@ -6,8 +6,9 @@ import os
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from .... import ai_srevices
+from .... import ai_services
 from .... import prompt_builder
+from ....services.image_helper import get_relative_path, get_image_path_to_save, save_image_in_db
 
 router = APIRouter()
 
@@ -35,16 +36,12 @@ def create_character_for_project(project_id: uuid.UUID, character: schemas.Chara
             raise HTTPException(status_code=404, detail="Project not found")
 
         full_prompt = prompt_builder.build_character_prompt(db_character.description, db_project.visualStyle)
-        image_bytes = ai_srevices.generate_image_from_prompt(prompt=full_prompt, aspect_ratio="3:4")
+        image_bytes = ai_services.generate_image_from_prompt(prompt=full_prompt, aspect_ratio="3:4")
         
         if image_bytes:
             # Save the generated image locally
-            file_path = f"static/images/{db_character.id}.png"
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-            
-            # Update the character's imagePath in the database
+            file_path = f"{get_image_path_to_save()}/{db_character.id}.png"
+            save_image_in_db(image_path=file_path, image_bytes=image_bytes)
             db_character.imagePath = "/" + file_path
             db.commit()
             db.refresh(db_character)
@@ -87,7 +84,7 @@ def delete_character(character_id: uuid.UUID, db: Session = Depends(get_db)):
     # If an image path exists, attempt to delete the file
     if db_character.imagePath:
         # Convert the URL path to a valid relative file path by removing the leading '/'
-        relative_file_path = db_character.imagePath.lstrip('/')
+        relative_file_path = get_relative_path(db_character.imagePath)
         
         # Check if the file actually exists before trying to delete it
         if os.path.exists(relative_file_path):
@@ -126,8 +123,8 @@ def update_character_image(
     
     full_prompt = prompt_builder.build_modify_character_prompt(original_prompt=db_character.description, prompt=request.prompt, visual_style=db_project.visualStyle)
     image_path_from_db = db_character.imagePath
-    relative_file_path = image_path_from_db.lstrip('/')
-    image_bytes = ai_srevices.edit_image_from_prompt(
+    relative_file_path = get_relative_path(image_path_from_db)
+    image_bytes = ai_services.edit_image_from_prompt(
         prompt=full_prompt,
         original_image_path=relative_file_path
     )
@@ -136,7 +133,7 @@ def update_character_image(
         raise HTTPException(status_code=500, detail="Failed to generate image from AI Services!")
     
     # Overwrite the existing image file
-    file_path = f"static/images/{character_id}.png"
+    file_path = f"{get_image_path_to_save()}/{character_id}.png"
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "wb") as f:
         f.write(image_bytes)

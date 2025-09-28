@@ -4,7 +4,7 @@ import uuid
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from .... import ai_srevices
+from .... import ai_services
 
 router = APIRouter()
 
@@ -38,7 +38,7 @@ def generate_story(project_id: uuid.UUID, db: Session = Depends(get_db)):
     
     try:
         # Call the AI service to do the heavy lifting
-        generated_story = ai_srevices.generate_story_from_project_context(project_context=project_context)
+        generated_story = ai_services.generate_story_from_project_context(project_context=project_context)
 
         if not generate_story:
             raise HTTPException(status_code=500, detail="AI Service returned an empty story")

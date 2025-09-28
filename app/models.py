@@ -86,7 +86,7 @@ class ScreenplayScene(Base):
 
     project = relationship("Project", back_populates="screenplayScenes")
     storyboardImage = relationship("StoryboardImage", back_populates="scene", uselist=False, cascade="all, delete-orphan")
-    animaticScene = relationship("AnimaticScene", back_populates="scene", uselist=False, cascade="all, delete-orphan")
+    animaticScene = relationship("AnimaticsScene", back_populates="scene", uselist=False, cascade="all, delete-orphan")
 
 class StoryboardImage(Base):
     __tablename__ = "StoryboardImages"
@@ -102,7 +102,7 @@ class StoryboardImage(Base):
     
     scene = relationship("ScreenplayScene", back_populates="storyboardImage")
 
-class AnimaticScene(Base):
+class AnimaticsScene(Base):
     __tablename__ = "AnimaticScenes"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False)

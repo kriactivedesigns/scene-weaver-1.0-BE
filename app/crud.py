@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -6,8 +7,10 @@ from . import models, schemas
 import uuid
 import markdown2
 import os
+from .services.image_helper import get_relative_path, save_image_in_db, get_image_path_to_save
+from .services.video_helper import save_video_in_db, get_video_path_to_save
 
-from . import ai_srevices
+from . import ai_services
 
 # Project CRUD functions
 def get_project(db: Session, project_id: uuid.UUID):
@@ -295,9 +298,16 @@ def delete_scene_and_reorder(db: Session, scene_id: uuid.UUID) -> bool:
     Deletes a scene from the database. Returns True on success, False if not found.
     """
     scene_to_delete = db.query(models.ScreenplayScene).filter(models.ScreenplayScene.id == scene_id).first()
-
     if not scene_to_delete:
         return None
+
+    linked_storyboard = db.query(models.StoryboardImage).filter(models.StoryboardImage.sceneId == scene_id).first()
+    if linked_storyboard:
+        delete_storyboard(db=db, storyboard_id=linked_storyboard.id)
+
+    linked_animatics = db.query(models.AnimaticsScene).filter(models.AnimaticsScene.sceneId == scene_id).first()
+    if linked_animatics:
+        delete_animatics(db=db, animatics_id=linked_animatics.id)
     
     project_id = scene_to_delete.projectId
     db.delete(scene_to_delete)
@@ -333,34 +343,27 @@ def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_id: uu
     soup = BeautifulSoup(scene.content or "", "html.parser")
     plain_text_scene = soup.get_text(separator=" ", strip=True)
     
-    entities = ai_srevices.extract_entities_from_scene(plain_text_scene)
+    entities = ai_services.extract_entities_from_scene(plain_text_scene)
 
     print("entities", entities)
 
     character_names_lower = [name.lower() for name in entities.get("characters", [])]
     world_names_lower = [name.lower() for name in entities.get("worlds", [])]
 
-    character_paths_from_db = [
-        char.imagePath for char in 
+    character_paths = [
+        get_relative_path(char.imagePath) for char in 
         db.query(models.Character).filter(
             models.Character.projectId == project_id,
             func.lower(models.Character.name).in_(character_names_lower)
         ).all()
     ]
 
-    world_paths_from_db = [
-        world.imagePath for world in 
+    world_paths = [
+        get_relative_path(world.imagePath) for world in 
         db.query(models.World).filter(
             models.World.projectId == project_id,
             func.lower(models.World.name).in_(world_names_lower)
         ).all()
-    ]
-
-    character_paths = [
-        path.lstrip('/') for path in character_paths_from_db
-    ]
-    world_paths = [
-        path.lstrip('/') for path in world_paths_from_db
     ]
 
     print("character paths",character_paths)
@@ -376,26 +379,25 @@ def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_id: uu
     if not final_prompt:
         final_prompt = "A visually interesting, high-quality cinematic storyboard image."
 
-    image_bytes = ai_srevices.generate_storyboard_image_from_references(final_prompt, character_paths, world_paths)
-
-    storyboard_id = uuid.uuid4()
-    image_path = os.path.join(f"static/images/{storyboard_id}.png")
-    with open(image_path, "wb") as f:
-        f.write(image_bytes)
+    image_bytes = ai_services.generate_storyboard_image_from_references(final_prompt, character_paths, world_paths)
 
     db_storyboard = db.query(models.StoryboardImage).filter(models.StoryboardImage.sceneId == scene_id).first()
     if db_storyboard:
         # Update existing storyboard
-        db_storyboard.imagePath = image_path
+        image_path = db_storyboard.imagePath
+        save_image_in_db(image_path=image_path, image_bytes=image_bytes)
         db_storyboard.prompt = final_prompt
         db_storyboard.version += 1
     else:
         # Create new storyboard
+        storyboard_id = uuid.uuid4()
+        image_path = os.path.join(f"{get_image_path_to_save()}/{storyboard_id}.png")
+        save_image_in_db(image_path=image_path, image_bytes=image_bytes)
         db_storyboard = models.StoryboardImage(
             id=storyboard_id,
             projectId=project_id,
             sceneId=scene_id,
-            aspectRatio="16:9", # Default or from request
+            aspectRatio="16:9",
             prompt=final_prompt,
             imagePath=image_path
         )
@@ -416,3 +418,137 @@ def get_storyboards_by_project(db: Session, project_id: uuid.UUID) -> List[model
         .filter(models.StoryboardImage.projectId == project_id)\
         .order_by(models.ScreenplayScene.sceneNumber)\
         .all()
+
+def delete_storyboard(db: Session, storyboard_id: uuid.UUID) -> bool:
+    """
+    Finds a storyboard by its ID, deletes its associated image file from
+    the filesystem, and then deletes the database record.
+    Returns True on success, False if the storyboard is not found.
+    """
+    storyboard_to_delete = db.query(models.StoryboardImage).filter(models.StoryboardImage.id == storyboard_id).first()
+
+    if not storyboard_to_delete:
+        return False
+    
+    if storyboard_to_delete.imagePath:
+        try:
+            relative_file_path = get_relative_path(storyboard_to_delete.imagePath)
+            os.remove(relative_file_path)
+            print(f"Deleted storyboard image file: {relative_file_path}")
+        except OSError as e:
+            # Log the error (e.g., file not found) but continue the process.
+            print(f"Notice: Could not delete file {relative_file_path}: {e}")
+
+    db.delete(storyboard_to_delete)
+    return True
+
+# Animatics Crud funcations
+async def create_animatics_for_scene(db: Session, project_id: uuid.UUID, scene_id: uuid.UUID) -> models.AnimaticsScene:
+    """
+    Orchestrates creating or updating an animatic for a single scene.
+    """
+    print("create_animatics_for_scene called")
+    
+    scene = db.query(models.ScreenplayScene).filter(models.ScreenplayScene.id == scene_id).first()
+    if not scene:
+        raise ValueError("Scene not found")
+    
+    storyboard = db.query(models.StoryboardImage).filter(models.StoryboardImage.sceneId == scene_id).first()
+    if not storyboard:
+        raise ValueError("Storyboard image for scene not found. Generate storyboard first.")
+
+    soup = BeautifulSoup(scene.content or "", "html.parser")
+    plain_text_prompt = soup.get_text(separator=" ", strip=True)
+    if not plain_text_prompt.strip():
+        plain_text_prompt = "A cinematic, animated scene."
+
+    character_image_paths = [
+        get_relative_path(char.imagePath) for char in 
+        db.query(models.Character).filter(models.Character.projectId == project_id).all()
+    ]
+
+    world_image_paths = [
+        get_relative_path(world.imagePath) for world in 
+        db.query(models.World).filter(models.World.projectId == project_id).all()
+    ]
+
+    video_bytes = await ai_services.generate_animatics_video_from_references(
+        prompt=plain_text_prompt,
+        storyboard_image_path=storyboard.imagePath,
+        character_image_paths=character_image_paths,
+        world_image_paths=world_image_paths,
+        duration_in_seconds=scene.duration
+    )
+
+    db_animatics = db.query(models.AnimaticsScene).filter(models.AnimaticsScene.sceneId == scene_id).first()
+
+    if db_animatics:
+        # Update existing animatic
+        video_path = db_animatics.videoPath
+        save_video_in_db(video_path, video_bytes)
+        db_animatics.version += 1
+    else:
+        # Create new animatic
+        animatics_id = uuid.uuid4()
+        save_directory = get_video_path_to_save()
+        video_path = os.path.join(save_directory, f"{animatics_id}.mp4")
+        save_video_in_db(video_path, video_bytes)
+
+        db_animatic = models.AnimaticsScene(
+            id=animatics_id,
+            projectId=project_id,
+            sceneId=scene_id,
+            duration=scene.duration,
+            aspectRatio="16:9",
+            videoPath=video_path
+        )
+        db.add(db_animatic) 
+
+    db.commit()
+    db.refresh(db_animatic)
+    return db_animatic
+
+def get_animatics_by_project(db: Session, project_id: uuid.UUID) -> List[models.AnimaticsScene]:
+    """Retrieves all animatic scenes for a project, ordered by scene number."""
+    return db.query(models.AnimaticsScene)\
+        .join(models.ScreenplayScene, models.AnimaticsScene.sceneId == models.ScreenplayScene.id)\
+        .filter(models.AnimaticsScene.projectId == project_id)\
+        .order_by(models.ScreenplayScene.sceneNumber)\
+        .all()
+
+def delete_animatics(db: Session, animatics_id: uuid.UUID) -> bool:
+    """
+    Finds an Animatics by its ID, deletes its associated image file from
+    the filesystem, and then deletes the database record.
+    Returns True on success, False if the storyboard is not found.
+    """
+    animatics_to_delete = db.query(models.AnimaticsScene).filter(models.AnimaticsScene.id == animatics_id).first()
+
+    if not animatics_to_delete:
+        return False
+    
+    if animatics_to_delete.imagePath:
+        try:
+            relative_file_path = get_relative_path(animatics_to_delete.imagePath)
+            os.remove(relative_file_path)
+            print(f"Deleted storyboard image file: {relative_file_path}")
+        except OSError as e:
+            # Log the error (e.g., file not found) but continue the process.
+            print(f"Notice: Could not delete file {relative_file_path}: {e}")
+
+    db.delete(animatics_to_delete)
+    return True
+
+
+
+
+
+
+
+
+
+
+
+
+
+

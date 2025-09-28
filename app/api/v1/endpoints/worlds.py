@@ -7,8 +7,9 @@ import logging
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from .... import ai_srevices
+from .... import ai_services
 from .... import prompt_builder
+from ....services.image_helper import get_relative_path, save_image_in_db, get_image_path_to_save
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -34,16 +35,12 @@ def create_world_for_project(project_id: uuid.UUID, world: schemas.WorldCreate, 
         raise HTTPException(status_code=404, detail="Project not found")
     
     full_prompt = prompt_builder.build_world_prompt(db_world.description, db_project.visualStyle)
-    image_bytes = ai_srevices.generate_image_from_prompt(prompt=full_prompt, aspect_ratio=db_project.aspectRatio)
+    image_bytes = ai_services.generate_image_from_prompt(prompt=full_prompt, aspect_ratio=db_project.aspectRatio)
 
     if image_bytes:
         # Save the generated image locally
-        file_path = f"static/images/{db_world.id}.png"
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "wb") as f:
-            f.write(image_bytes)
-
-        # Update the world's image path in database
+        file_path = f"{get_image_path_to_save()}/{db_world.id}.png"
+        save_image_in_db(image_path=file_path, image_bytes=image_bytes)
         db_world.imagePath = "/" + file_path
         db.commit()
         db.refresh(db_world)
@@ -86,7 +83,7 @@ def delete_world(world_id: uuid.UUID, db: Session = Depends(get_db)):
     # If an image path exists, attempt to delete the file
     if db_world.imagePath:
         # Convert the URL path to a valid relative file path by removing the leading '/'
-        relative_file_path = db_world.imagePath.lstrip('/')
+        relative_file_path = get_relative_path(db_world.imagePath)
         
         # Check if the file actually exists before trying to delete it
         if os.path.exists(relative_file_path):
@@ -124,8 +121,8 @@ def generate_world_image(
 
     full_prompt = prompt_builder.build_modify_world_prompt(request.prompt, db_project.visualStyle)
     image_path_from_db = db_world.imagePath
-    relative_file_path = image_path_from_db.lstrip('/')
-    image_bytes = ai_srevices.edit_image_from_prompt(
+    relative_file_path = get_relative_path(image_path_from_db)
+    image_bytes = ai_services.edit_image_from_prompt(
         prompt=full_prompt,
         original_image_path=relative_file_path
     )
@@ -133,10 +130,8 @@ def generate_world_image(
     if not image_bytes:
         raise HTTPException(status_code=500, detail="Failed to generate image AI Servoces!")
     
-    file_path = f"static/images/{world_id}.png"
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    with open(file_path, "wb") as f:
-        f.write(image_bytes)
+    file_path = f"{get_image_path_to_save()}/{world_id}.png"
+    save_image_in_db(image_path=file_path, image_bytes=image_bytes)
 
     db_world.imagePath = "/" + file_path
     db.commit()

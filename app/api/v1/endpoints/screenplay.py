@@ -6,7 +6,7 @@ import uuid
 
 from .... import crud, schemas
 from ....database import SessionLocal
-from .... import ai_srevices
+from .... import ai_services
 
 router = APIRouter()
 
@@ -33,7 +33,7 @@ def generate_screenplay(project_id: uuid.UUID, db: Session = Depends(get_db)):
     plain_text_story = soup.get_text(separator='\\n', strip=True)
     
     # 3. Call the AI service to get scene data
-    scenes_data = ai_srevices.generate_scenes_from_story(story_content=plain_text_story)
+    scenes_data = ai_services.generate_scenes_from_story(story_content=plain_text_story)
     if not scenes_data:
         raise HTTPException(status_code=500, detail="AI service failed to generate screenplay scenes.")
     

@@ -17,7 +17,10 @@ def get_db():
         db.close()
 
 @router.post("/projects/{project_id}/storyboards/generate", status_code=status.HTTP_202_ACCEPTED)
-def generate_storyboards(project_id: uuid.UUID, request: schemas.StoryboardsGenerate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def generate_project_storyboards(project_id: uuid.UUID, request: schemas.StoryboardsGenerate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Starts an asynchronous job to generate storyboards for the specified scene IDs.
+    """
     job_id = str(uuid.uuid4())
     job_manager[job_id] = {"cancelled": False}
     
@@ -30,6 +33,9 @@ def generate_storyboards(project_id: uuid.UUID, request: schemas.StoryboardsGene
 
 @router.post("/storyboards/cancel/{job_id}", status_code=status.HTTP_200_OK)
 def cancel_generation_job(job_id: str):
+    """
+    Requests the cancellation of an ongoing storyboard generation job.
+    """
     if job_id not in job_manager:
         raise HTTPException(status_code=404, detail="Job not found.")
     job_manager[job_id]["cancelled"] = True
@@ -37,6 +43,10 @@ def cancel_generation_job(job_id: str):
 
 @router.websocket("/ws/storyboard-updates/{job_id}")
 async def websocket_endpoint(websocket: WebSocket, job_id: str):
+    """
+    Establishes a WebSocket connection to receive real-time updates for an
+    animatic generation job.
+    """
     await manager.connect(job_id, websocket)
     try:
         while True:

@@ -2,53 +2,144 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
+import logging
 from .... import schemas
-from ....database import SessionLocal
+from ...dependencies import get_db
 from ..crud.projects import create_project, get_projects, get_project, delete_project
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# This is a dependancy that provides database session to the endpoint
-# and ensures it's closed after the request is finished
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally: 
-        db.close()
-
-@router.post("/", response_model=schemas.Project)
-def create_project(project: schemas.ProjectCreate, db: Session = Depends(get_db)):
+@router.post("/", response_model=schemas.Project, status_code=status.HTTP_201_CREATED)
+def create_project_route(project: schemas.ProjectCreate, db: Session = Depends(get_db)):
     """
     Create a new project.
+    
+    Args:
+        project: Project data to create
+        db: Database session
+        
+    Returns:
+        The created project
+        
+    Raises:
+        HTTPException: If project creation fails
     """
-    return create_project(db=db, project=project)
+    try:
+        logger.info(f"Creating new project: {project.projectName}")
+        return create_project(db=db, project=project)
+    except Exception as e:
+        logger.error(f"Failed to create project {project.projectName}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create project"
+        )
 
 @router.get("/", response_model=List[schemas.Project])
-def read_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_projects_route(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = Depends(get_db)
+):
     """
-    Retrieve all projects
+    Retrieve all projects with pagination.
+    
+    Args:
+        skip: Number of projects to skip (default: 0)
+        limit: Maximum number of projects to return (default: 100, max: 1000)
+        db: Database session
+        
+    Returns:
+        List of projects
     """
-    projects = get_projects(db, skip=skip, limit=limit)
-    return projects
+    # Validate pagination parameters
+    if limit > 1000:
+        limit = 1000
+    if skip < 0:
+        skip = 0
+        
+    try:
+        logger.info(f"Retrieving projects with skip={skip}, limit={limit}")
+        return get_projects(db, skip=skip, limit=limit)
+    except Exception as e:
+        logger.error(f"Failed to retrieve projects: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve projects"
+        )
 
 @router.get("/{project_id}", response_model=schemas.Project)
-def read_project(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def read_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Retrieve a single project by its ID.
+    
+    Args:
+        project_id: UUID of the project to retrieve
+        db: Database session
+        
+    Returns:
+        The requested project
+        
+    Raises:
+        HTTPException: If project is not found or retrieval fails
     """
-    db_project = get_project(db, project_id=project_id)
-    if db_project is None:
-        raise HTTPException(status_code=404, detail="Project not found!")
-    return db_project
+    try:
+        logger.info(f"Retrieving project: {project_id}")
+        project = get_project(db, project_id=project_id)
+        if project is None:
+            logger.warning(f"Project not found: {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail=f"Project with ID {project_id} not found"
+            )
+        return project
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
+        logger.error(f"Failed to retrieve project {project_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve project"
+        )
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(project_id: uuid.UUID, db: Session =Depends(get_db)):
+def delete_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Delete a project and all its related data.
-    """
-    success = delete_project(db, project_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Project not found")
     
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    This operation cascades to delete all related entities including:
+    - Characters and their images
+    - Worlds and their images
+    - Storyboards and their images
+    - Animatics and their videos
+    - Story threads and screenplay scenes
+    
+    Args:
+        project_id: UUID of the project to delete
+        db: Database session
+        
+    Returns:
+        Empty response with 204 status
+        
+    Raises:
+        HTTPException: If project is not found or deletion fails
+    """
+    try:
+        logger.info(f"Deleting project: {project_id}")
+        success = delete_project(db, project_id)
+        if not success:
+            logger.warning(f"Project not found for deletion: {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail=f"Project with ID {project_id} not found"
+            )
+        logger.info(f"Successfully deleted project: {project_id}")
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
+        logger.error(f"Failed to delete project {project_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete project"
+        )

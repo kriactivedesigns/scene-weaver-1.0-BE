@@ -19,7 +19,7 @@ def get_db():
         db.close()
 
 @router.post("/projects/{project_id}/generate-screenplay", response_model=List[schemas.ScreenplayScene])
-def generate_screenplay(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def generate_screenplay_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Generates a full screenplay from the project's story, overwriting any
     existing scenes for this project.
@@ -46,7 +46,7 @@ def generate_screenplay(project_id: uuid.UUID, db: Session = Depends(get_db)):
     return new_scenes
 
 @router.post("/projects/{project_id}/screenplayscenes", response_model=schemas.ScreenplayScene, status_code=status.HTTP_201_CREATED)
-def add_new_scene(project_id: uuid.UUID, scene_data: schemas.NewScreenplayScene, db: Session = Depends(get_db)):
+def add_new_scene_route(project_id: uuid.UUID, scene_data: schemas.NewScreenplayScene, db: Session = Depends(get_db)):
     """
     Manually adds a new scene to the end of a project's screenplay.
     The sceneNumber is calculated automatically by the server.
@@ -56,7 +56,7 @@ def add_new_scene(project_id: uuid.UUID, scene_data: schemas.NewScreenplayScene,
     return new_scene
 
 @router.patch("/screenplayscenes/{scene_id}", response_model=schemas.ScreenplayScene)
-def update_screenplay_scene(scene_id: uuid.UUID, scene_update: schemas.ScreenplaySceneUpdate, db: Session = Depends(get_db)):
+def update_screenplay_scene_route(scene_id: uuid.UUID, scene_update: schemas.ScreenplaySceneUpdate, db: Session = Depends(get_db)):
     """
     Update a single screenplay scene's content, duration, or scene number.
     """
@@ -67,12 +67,12 @@ def update_screenplay_scene(scene_id: uuid.UUID, scene_update: schemas.Screenpla
     return db_scene
 
 @router.get("/projects/{project_id}/screenplay", response_model=List[schemas.ScreenplayScene])
-def get_screenplay(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_screenplay_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
     """Retrieve all scenes for a project's screenplay."""
     return get_screenlay_scenes_for_project(db=db, project_id=project_id)
 
 @router.delete("/screenplayscenes/{scene_id}", response_model=List[schemas.ScreenplayScene])
-def delete_screenplay_scene(scene_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_screenplay_scene_route(scene_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     Deletes a screenplay scene and re-orders the remaining scenes.
     Returns the complete, updated list of scenes for the project.

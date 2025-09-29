@@ -69,6 +69,7 @@ class Story(Base):
     projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False, unique=True)
     title = Column(String(255), nullable=False)
     content = Column(Text)
+    version = Column(Integer, nullable=False, default=1)
     createdAt = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updatedAt = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())
 

@@ -1,11 +1,14 @@
-from typing import List
+from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from bs4 import BeautifulSoup
-from .... import models
+from .... import models, schemas
 import uuid
-from ....services import gcs_helper
+from ....services.storage import storage_provider
 from .... import ai_services
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Storyboard Crud functions
 async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_id: uuid.UUID) -> models.StoryboardImage:
@@ -46,33 +49,51 @@ async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_
     db_storyboard = db.query(models.StoryboardImage).filter(models.StoryboardImage.sceneId == scene_id).first()
 
     if db_storyboard:
-        # If storyboard exists, overwrite the image in GCS
-        destination_blob = f"storyboards/{db_storyboard.id}.png"
-        public_url = gcs_helper.upload_file_from_bytes(image_bytes, destination_blob)
-        
-        if public_url:
-            db_storyboard.prompt = final_prompt
-            db_storyboard.version += 1
-        else:
-            raise IOError(f"Failed to upload updated storyboard image to GCS for scene {scene_id}")
+        # If storyboard exists, overwrite the image in storage
+        try:
+            destination_blob = f"storyboards/{db_storyboard.id}.png"
+            public_url = storage_provider.upload_file(
+                file_bytes=image_bytes,
+                destination_blob_name=destination_blob,
+                content_type="image/png"
+            )
+            
+            if public_url:
+                db_storyboard.prompt = final_prompt
+                db_storyboard.version += 1
+                logger.info(f"Updated storyboard image for scene {scene_id}: {db_storyboard.id}")
+            else:
+                raise IOError(f"Failed to upload updated storyboard image to storage for scene {scene_id}")
+        except Exception as e:
+            logger.error(f"Failed to update storyboard for scene {scene_id}: {str(e)}")
+            raise
     else:
         # If new, create the storyboard record
-        storyboard_id = uuid.uuid4()
-        destination_blob = f"storyboards/{storyboard_id}.png"
-        public_url = gcs_helper.upload_file_from_bytes(image_bytes, destination_blob)
+        try:
+            storyboard_id = uuid.uuid4()
+            destination_blob = f"storyboards/{storyboard_id}.png"
+            public_url = storage_provider.upload_file(
+                file_bytes=image_bytes,
+                destination_blob_name=destination_blob,
+                content_type="image/png"
+            )
 
-        if not public_url:
-            raise IOError(f"Failed to upload initial storyboard image to GCS for scene {scene_id}")
+            if not public_url:
+                raise IOError(f"Failed to upload initial storyboard image to storage for scene {scene_id}")
 
-        db_storyboard = models.StoryboardImage(
-            id=storyboard_id,
-            projectId=project_id,
-            sceneId=scene_id,
-            aspectRatio="16:9",
-            prompt=final_prompt,
-            imagePath=public_url # Store the public GCS URL
-        )
-        db.add(db_storyboard)
+            db_storyboard = models.StoryboardImage(
+                id=storyboard_id,
+                projectId=project_id,
+                sceneId=scene_id,
+                aspectRatio="16:9",
+                prompt=final_prompt,
+                imagePath=public_url # Store the public storage URL
+            )
+            db.add(db_storyboard)
+            logger.info(f"Created new storyboard for scene {scene_id}: {storyboard_id}")
+        except Exception as e:
+            logger.error(f"Failed to create storyboard for scene {scene_id}: {str(e)}")
+            raise
 
     db.commit()
     db.refresh(db_storyboard)
@@ -88,23 +109,81 @@ def get_storyboards_by_project(db: Session, project_id: uuid.UUID) -> List[model
         .order_by(models.ScreenplayScene.sceneNumber)\
         .all()
 
+def get_storyboard_by_id(db: Session, storyboard_id: uuid.UUID) -> Optional[models.StoryboardImage]:
+    """
+    Retrieves a specific storyboard by its ID.
+    
+    Args:
+        db: Database session
+        storyboard_id: UUID of the storyboard to retrieve
+        
+    Returns:
+        Storyboard image model if found, None otherwise
+        
+    Raises:
+        Exception: If database query fails
+    """
+    try:
+        logger.debug(f"Retrieving storyboard: {storyboard_id}")
+        
+        storyboard = db.query(models.StoryboardImage).filter(
+            models.StoryboardImage.id == storyboard_id
+        ).first()
+        
+        if storyboard:
+            logger.debug(f"Found storyboard: {storyboard_id}")
+        else:
+            logger.debug(f"Storyboard not found: {storyboard_id}")
+            
+        return storyboard
+    except Exception as e:
+        logger.error(f"Failed to retrieve storyboard {storyboard_id}: {str(e)}")
+        raise
+
+
 def delete_storyboard(db: Session, storyboard_id: uuid.UUID) -> bool:
     """
-    Finds a storyboard, deletes its image from GCS, and then deletes the DB record.
+    Finds a storyboard, deletes its image from storage, and then deletes the DB record.
+    
+    Args:
+        db: Database session
+        storyboard_id: UUID of the storyboard to delete
+        
+    Returns:
+        True if deleted successfully, False if not found
+        
+    Raises:
+        Exception: If deletion fails
     """
-    db_storyboard = db.query(models.StoryboardImage).filter(models.StoryboardImage.id == storyboard_id).first()
-    if not db_storyboard:
-        return False
+    try:
+        logger.info(f"Deleting storyboard: {storyboard_id}")
+        
+        db_storyboard = db.query(models.StoryboardImage).filter(
+            models.StoryboardImage.id == storyboard_id
+        ).first()
+        
+        if not db_storyboard:
+            logger.warning(f"Storyboard not found for deletion: {storyboard_id}")
+            return False
 
-    # This check is now against the imagePath URL
-    if db_storyboard.imagePath:
-        try:
-            # Directly construct the blob name to delete from GCS
-            blob_name = f"storyboards/{storyboard_id}.png"
-            gcs_helper.delete_file(blob_name)
-        except Exception as e:
-            print(f"Notice: Could not delete GCS file for storyboard {storyboard_id}. Error: {e}")
+        # Delete the image from storage if it exists
+        if db_storyboard.imagePath:
+            try:
+                # Construct the blob name to delete from storage
+                blob_name = f"storyboards/{storyboard_id}.png"
+                storage_provider.delete_file(blob_name)
+                logger.debug(f"Deleted storyboard image from storage: {blob_name}")
+            except Exception as e:
+                logger.warning(f"Could not delete storage file for storyboard {storyboard_id}: {str(e)}")
 
-    db.delete(db_storyboard)
-    db.commit() # Commit the deletion
-    return True
+        # Delete the database record
+        db.delete(db_storyboard)
+        db.commit()
+        
+        logger.info(f"Successfully deleted storyboard: {storyboard_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to delete storyboard {storyboard_id}: {str(e)}")
+        db.rollback()
+        raise

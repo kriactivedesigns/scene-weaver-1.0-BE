@@ -1,9 +1,23 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import models
 from .database import engine
 from .api.v1.endpoints import projects, worlds, characters, storythread, story, screenplay, storyboard, animatics # Import projects router
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+    ]
+)
+
+# Set specific log levels for different modules
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)  # Reduce SQLAlchemy verbosity
+logging.getLogger("uvicorn").setLevel(logging.INFO)
 
 # This line creates all the database tables based on the SQLAlchemy Models
 # For Production environment, we will want to manage this with migrations (Alembic).

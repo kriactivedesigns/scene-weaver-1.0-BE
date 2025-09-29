@@ -208,7 +208,7 @@ def extract_entities_from_scene(scene_content: str) -> Dict[str, List[str]]:
 
         Your JSON output:
     """
-    model = GenerativeModel("gemini-2.5-flash")
+    model = GenerativeModel(os.getenv("LLM_MODEL", "gemini-2.5-flash"))
     config = GenerationConfig(response_mime_type="application/json")
     
     try:
@@ -217,8 +217,13 @@ def extract_entities_from_scene(scene_content: str) -> Dict[str, List[str]]:
         cleaned_text = re.sub(r"^``````$", "", response.text, flags=re.MULTILINE)
         return json.loads(cleaned_text)
     except Exception as e:
-        print(f"Error extracting entities: {e}")
-        return {"characters": [], "worlds": []}
+        # Log the full error details for debugging
+        logger.error(f"Error extracting entities from scene content: {str(e)}")
+        logger.error(f"Scene content length: {len(scene_content)} characters")
+        logger.error(f"Scene content preview: {scene_content[:200]}...")
+        
+        # Re-raise the exception so the task manager can handle it properly
+        raise Exception(f"Entity extraction failed: {str(e)}")
     
 async def generate_storyboard_image_from_references(prompt: str, character_image_paths: List[str], world_image_paths: List[str]) -> bytes:
     """

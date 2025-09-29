@@ -115,6 +115,7 @@ class StoryContentUpdate(BaseModel):
 class Story(StoryBase):
     id: uuid.UUID
     projectId: uuid.UUID
+    version: int
     createdAt: datetime
     updatedAt: datetime
 

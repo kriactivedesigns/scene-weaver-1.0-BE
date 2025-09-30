@@ -3,8 +3,8 @@ import os
 import logging
 from pathlib import Path
 import re
-from typing import List, Dict, Any
-from vertexai.preview.vision_models import ImageGenerationModel
+from typing import List, Dict, Any, Union
+from vertexai.preview.vision_models import ImageGenerationModel, Image
 from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
 from google import genai
 from google.genai import types
@@ -12,6 +12,7 @@ from google.genai.errors import APIError
 import time
 import asyncio
 from dotenv import load_dotenv
+from .services.storage import storage_provider
 
 load_dotenv()
 
@@ -60,7 +61,7 @@ def edit_image_from_prompt(prompt: str, original_image_bytes: bytes) -> bytes | 
     """
     
     model = ImageGenerationModel.from_pretrained("imagegeneration@002")
-    base_image = load_image(original_image_bytes)
+    base_image = Image(image_bytes=original_image_bytes)
     logger.info(f"Re-generating image for editing with new prompt.")
 
     try:
@@ -238,9 +239,10 @@ async def generate_storyboard_image_from_references(prompt: str, character_image
     image_parts = []
     all_original_image_paths  = character_image_paths + world_image_paths
     for original_image_path in all_original_image_paths:
-        image = load_image(original_image_path)
-        image_part = Part.from_data(data=image._image_bytes, mime_type="image/png")
-        image_parts.append(image_part)
+        image_bytes = storage_provider.download_file_as_bytes(original_image_path)
+        if image_bytes:
+            image_part = Part.from_data(data=image_bytes, mime_type="image/png")
+            image_parts.append(image_part)
             
     gemini_prompt_parts = [text_part] + image_parts
 
@@ -295,9 +297,11 @@ async def generate_animatics_video_from_references(prompt: str, storyboard_image
     all_original_image_paths  = character_image_paths + world_image_paths + [storyboard_image_path]
     for relative_path in all_original_image_paths:
         if not relative_path: continue
-        image = load_image(relative_path)
-        image_part = Part.from_data(data=image._image_bytes, mime_type="image/png")
-        image_parts.append(image_part)
+        
+        image_bytes = storage_provider.download_file_as_bytes(relative_path)
+        if image_bytes:
+            image_part = Part.from_data(data=image_bytes, mime_type="image/png")
+            image_parts.append(image_part)
 
     gemini_prompt_parts = [text_part] + image_parts
 

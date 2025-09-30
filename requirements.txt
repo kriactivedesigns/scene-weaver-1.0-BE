@@ -7,6 +7,12 @@ sqlalchemy
 psycopg2-binary # For Postgresql
 alembic # For database migrations
 
+# HTTP Client for Cloudflare D1 API
+httpx
+
+# AWS SDK for Cloudflare R2 (S3-compatible)
+boto3
+
 # Pydantic & Settings Management
 pydantic
 pydantic-settings

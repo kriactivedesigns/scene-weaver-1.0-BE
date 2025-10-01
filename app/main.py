@@ -24,9 +24,82 @@ logging.getLogger("uvicorn").setLevel(logging.INFO)
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="CausalSyntax SceneWeaver API",
-    description="Backend services for the SceneWeaver AI Application",
-    version="0.1.0"
+    title="🎬 CausalSyntax SceneWeaver API",
+    description="""
+    ## SceneWeaver AI-Powered Story Creation Platform
+    
+    Welcome to the SceneWeaver API - a comprehensive backend service for AI-powered storytelling and content creation.
+    
+    ### Features:
+    * 📚 **Project Management** - Organize your creative projects
+    * 🌍 **World Building** - Create immersive story worlds
+    * 👥 **Character Development** - Design compelling characters
+    * 🧵 **Story Threading** - Weave narrative threads together
+    * 📖 **Story Generation** - AI-powered story creation
+    * 🎭 **Screenplay Writing** - Transform stories into screenplays
+    * 🖼️ **Storyboard Creation** - Generate visual storyboards
+    * 🎞️ **Animatics Production** - Create animated sequences
+    
+    ### AI Providers:
+    * **Vertex AI** - Production-grade AI services
+    * **Local Mock** - Development and testing
+    
+    ### Storage Options:
+    * **Cloudflare R2** - Distributed cloud storage
+    * **Google Cloud Storage** - Enterprise cloud storage
+    * **Local Storage** - Development filesystem
+    
+    ---
+    
+    **🚀 Ready to create amazing stories with AI assistance!**
+    """,
+    version="1.0.0-beta",
+    contact={
+        "name": "CausalSyntax Inc.",
+        "url": "https://www.causalsyntax.com",
+        "email": "support@causalsyntax.com"
+    },
+    license_info={
+        "name": "Proprietary",
+        "url": "https://www.causalsyntax.com/license"
+    },
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    tags_metadata=[
+        {
+            "name": "Projects",
+            "description": "Manage creative projects and their metadata"
+        },
+        {
+            "name": "Worlds", 
+            "description": "Create and manage story worlds and settings"
+        },
+        {
+            "name": "Characters",
+            "description": "Design and develop story characters"
+        },
+        {
+            "name": "Story Thread",
+            "description": "Manage narrative threads and plot points"
+        },
+        {
+            "name": "Story",
+            "description": "AI-powered story generation and management"
+        },
+        {
+            "name": "Screenplay",
+            "description": "Convert stories into screenplay format"
+        },
+        {
+            "name": "Storyboard",
+            "description": "Generate visual storyboards from scenes"
+        },
+        {
+            "name": "Animatics",
+            "description": "Create animated sequences and videos"
+        }
+    ]
 )
 
 # Define the list of allowed origins

@@ -46,7 +46,7 @@ current_provider = os.getenv("AI_PROVIDER", "vertex-ai").lower()
 # Display AI provider initialization status with beautiful icons
 provider_status = {
     "vertex-ai": "🤖 Vertex AI Provider initialized",
-    "local": "🏠 Local AI Provider initialized (Mock)"
+    "local": "🏠 Local AI Provider initialized"
 }
 
 status_message = provider_status.get(current_provider, f"🧠 {current_provider.title()} AI Provider initialized")

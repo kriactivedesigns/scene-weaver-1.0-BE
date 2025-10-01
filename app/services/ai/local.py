@@ -1,5 +1,7 @@
-import json
+import os
+import httpx
 import logging
+import base64
 from typing import List, Dict, Any, Optional
 import asyncio
 from .base import AIProvider
@@ -14,39 +16,82 @@ class LocalAIProvider(AIProvider):
     """
     
     def __init__(self):
-        print("🏠 Initialized Local AI Provider (Mock Implementation).")
-    
-    def generate_image_from_prompt(self, prompt: str, aspect_ratio: str) -> Optional[bytes]:
-        """
-        Mock implementation that returns a placeholder image.
-        In a real implementation, this could integrate with local models like Stable Diffusion.
-        """
-        logger.info(f"[LOCAL MOCK] Generating image with prompt: '{prompt[:80]}...'")
-        
-        # Return a minimal PNG placeholder (1x1 pixel black PNG)
-        # In real implementation, you would integrate with local image generation models
-        mock_png_bytes = bytes([
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG header
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # 1x1 dimensions
-            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,  # bit depth, color type, etc.
-            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,  # IDAT chunk
-            0x54, 0x08, 0x99, 0x01, 0x00, 0x00, 0x00, 0x00,  # compressed data
-            0x00, 0x02, 0x00, 0x01, 0xE2, 0x21, 0xBC, 0x33,  # checksum
-            0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,  # IEND chunk
-            0xAE, 0x42, 0x60, 0x82
-        ])
-        
-        logger.info("[LOCAL MOCK] Generated placeholder image successfully.")
-        return mock_png_bytes
+        self.base_url = os.getenv("LOCAL_AI_SERVICE_URL")
+        self.api_key = os.getenv("LOCAL_AI_API_KEY")
 
-    def edit_image_from_prompt(self, prompt: str, original_image_bytes: bytes) -> Optional[bytes]:
+        if not self.base_url or not self.api_key:
+            raise ValueError("LOCAL_AI_SERVICE_URL and LOCAL_AI_API_KEY must be set in environment variables.")
+        
+        self.headers = {
+            "Content-Type": "application/json",
+            "X-API-Key": self.api_key
+        }
+
+        # Use an async client for making requests
+        self.client = httpx.AsyncClient(base_url=self.base_url, headers=self.headers, timeout=300.0)
+        
+        logger.info(f"🏠 Initialized Local AI Provider, connected to: {self.base_url}")
+    
+    async def generate_image_from_prompt(self, prompt: str, aspect_ratio: str) -> Optional[bytes]:
         """
-        Mock implementation that returns the original image unchanged.
+        Calls the local AI service to generate an image from a prompt.
         """
-        logger.info(f"[LOCAL MOCK] Editing image with prompt: '{prompt[:80]}...'")
-        logger.info(f"[LOCAL MOCK] Returning original image unchanged (length: {len(original_image_bytes)} bytes)")
-        return original_image_bytes
+        logger.info(f"[Local AI] Generating image with prompt: '{prompt[:80]}...'")
+        
+        payload = {
+            "prompt": prompt,
+            "aspect_ratio": aspect_ratio
+        }
+        
+        try:
+            response = await self.client.post("/api/v1/generate", json=payload)
+            response.raise_for_status()            
+            result = response.json()
+            if result.get("success") and result.get("image_base64"):
+                image_bytes = base64.b64decode(result["image_base64"])
+                logger.info("[Local AI] Image generated successfully.")
+                return image_bytes
+            else:
+                logger.error(f"[Local AI] Generation failed: {result.get('message', 'No image data')}")
+                return None
+        except httpx.RequestError as e:
+            logger.error(f"[Local AI] Error connecting to generation service: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"[Local AI] An unexpected error occurred during image generation: {e}")
+            return None
+
+    async def edit_image_from_prompt(self, prompt: str, original_image_bytes: bytes) -> Optional[bytes]:
+        """
+        Calls the local AI service to edit an image based on a prompt.
+        """
+        logger.info(f"[Local AI] Editing image with prompt: '{prompt[:80]}...'")
+        
+        image_base64 = base64.b64encode(original_image_bytes).decode('utf-8')
+        
+        payload = {
+            "image_base64": image_base64,
+            "prompt": prompt
+        }
+        
+        try:
+            response = await self.client.post("/api/v1/edit", json=payload)
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("success") and result.get("image_base64"):
+                edited_image_bytes = base64.b64decode(result["image_base64"])
+                logger.info("[Local AI] Image edited successfully.")
+                return edited_image_bytes
+            else:
+                logger.error(f"[Local AI] Editing failed: {result.get('message', 'No image data')}")
+                return None
+        except httpx.RequestError as e:
+            logger.error(f"[Local AI] Error connecting to editing service: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"[Local AI] An unexpected error occurred during image editing: {e}")
+            return None
 
     def generate_story_from_project_context(self, project_context: Dict[str, Any]) -> str:
         """

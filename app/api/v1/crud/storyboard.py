@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 from .... import models, schemas
 import uuid
 from ....services.storage import storage_provider
-from .... import ai_services
+from ....services.ai_services import generative_services
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_
     soup = BeautifulSoup(scene.content or "", "html.parser")
     plain_text_scene = soup.get_text(separator=" ", strip=True)
     
-    entities = ai_services.extract_entities_from_scene(plain_text_scene)
+    entities = generative_services.extract_entities_from_scene(plain_text_scene)
     character_names_lower = [name.lower() for name in entities.get("characters", [])]
     world_names_lower = [name.lower() for name in entities.get("worlds", [])]
 
@@ -41,7 +41,7 @@ async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_
     final_prompt = f"Cinematic storyboard image depicting: {plain_text_scene}"
 
     # Await the async AI service call to get the image bytes
-    image_bytes = await ai_services.generate_storyboard_image_from_references(final_prompt, character_paths, world_paths)
+    image_bytes = await generative_services.generate_storyboard_image_from_references(final_prompt, character_paths, world_paths)
     if not image_bytes:
         raise IOError("AI service failed to generate storyboard image bytes.")
 

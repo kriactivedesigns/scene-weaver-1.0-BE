@@ -1,12 +1,11 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from app import prompt_builder
 from .... import models, schemas
 import uuid
 import logging
 from typing import List, Optional
 from ....services.storage import storage_provider
-from .... import ai_services
+from ....services.ai_services import prompt_builder, generative_services
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +54,7 @@ def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid.UUID)
             try:
                 logger.debug(f"Generating image for world: {db_world.id}")
                 full_prompt = prompt_builder.build_world_prompt(db_world.description, db_project.visualStyle)
-                image_bytes = ai_services.generate_image_from_prompt(
+                image_bytes = generative_services.generate_image_from_prompt(
                     prompt=full_prompt, 
                     aspect_ratio=db_project.aspectRatio
                 )
@@ -169,7 +168,7 @@ def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str) -> mod
 
         # Generate new image
         full_prompt = prompt_builder.build_modify_world_prompt(new_prompt, db_project.visualStyle)
-        new_image_bytes = ai_services.edit_image_from_prompt(full_prompt, original_image_bytes)
+        new_image_bytes = generative_services.edit_image_from_prompt(full_prompt, original_image_bytes)
         if not new_image_bytes:
             raise Exception("AI service failed to generate edited image.")
 

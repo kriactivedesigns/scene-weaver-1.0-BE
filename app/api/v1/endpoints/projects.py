@@ -5,7 +5,7 @@ import uuid
 import logging
 from .... import schemas
 from ...dependencies import get_db
-from ..crud.projects import create_project, get_projects, get_project, delete_project
+from ..crud.projects import create_project, get_projects, get_project, delete_project, update_project
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -100,6 +100,42 @@ def read_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve project"
+        )
+
+@router.put("/{project_id}", response_model=schemas.Project)
+def update_project_route(project_id: uuid.UUID, project_update: schemas.ProjectUpdate, db: Session = Depends(get_db)):
+    """
+    Update an existing project with partial data.
+    
+    Args:
+        project_id: UUID of the project to update
+        project_update: Partial project data to update
+        db: Database session
+        
+    Returns:
+        The updated project
+        
+    Raises:
+        HTTPException: If project is not found or update fails
+    """
+    try:
+        logger.info(f"Updating project: {project_id}")
+        updated_project = update_project(db, project_id=project_id, project_update=project_update)
+        if updated_project is None:
+            logger.warning(f"Project not found for update: {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project with ID {project_id} not found"
+            )
+        logger.info(f"Successfully updated project: {project_id}")
+        return updated_project
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions as-is
+    except Exception as e:
+        logger.error(f"Failed to update project {project_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update project"
         )
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

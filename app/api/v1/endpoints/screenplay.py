@@ -5,7 +5,7 @@ from typing import List
 import uuid
 from .... import schemas
 from ....database import SessionLocal
-from .... import ai_services
+from ....services.ai_services import generative_services
 from ..crud.screenplay import create_screenplay_scenes_for_project, get_screenlay_scenes_for_project, add_new_scene_to_project, update_screenplay_scene, delete_scene_and_reorder
 from ..crud.story import get_story_for_project
 
@@ -34,7 +34,7 @@ def generate_screenplay_route(project_id: uuid.UUID, db: Session = Depends(get_d
     plain_text_story = soup.get_text(separator='\\n', strip=True)
     
     # 3. Call the AI service to get scene data
-    scenes_data = ai_services.generate_scenes_from_story(story_content=plain_text_story)
+    scenes_data = generative_services.generate_scenes_from_story(story_content=plain_text_story)
     if not scenes_data:
         raise HTTPException(status_code=500, detail="AI service failed to generate screenplay scenes.")
     

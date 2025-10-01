@@ -1,12 +1,11 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from app import prompt_builder
 from .... import models, schemas
 import uuid
 import logging
 from typing import List, Optional
 from ....services.storage import storage_provider
-from .... import ai_services
+from ....services.ai_services import generative_services, prompt_builder
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ def create_character(db: Session, character: schemas.CharacterCreate, project_id
             try:
                 logger.debug(f"Generating image for character: {db_character.id}")
                 full_prompt = prompt_builder.build_character_prompt(db_character.description, db_project.visualStyle)
-                image_bytes = ai_services.generate_image_from_prompt(prompt=full_prompt, aspect_ratio="3:4")
+                image_bytes = generative_services.generate_image_from_prompt(prompt=full_prompt, aspect_ratio="3:4")
                 
                 if image_bytes:
                     # Save the generated image using the storage provider
@@ -163,6 +162,7 @@ def update_character_image(db: Session, character_id: uuid.UUID, new_prompt: str
         if not original_image_bytes:
             raise IOError("Failed to retrieve original image from storage.")
         
+        
         # Generate new prompt and create edited image
         full_prompt = prompt_builder.build_modify_character_prompt(
             original_prompt=db_character.description,
@@ -170,7 +170,9 @@ def update_character_image(db: Session, character_id: uuid.UUID, new_prompt: str
             visual_style=db_project.visualStyle
         )
         
-        new_image_bytes = ai_services.edit_image_from_prompt(
+        logger.info("Full prompt: %s", full_prompt)
+        
+        new_image_bytes = generative_services.edit_image_from_prompt(
             prompt=full_prompt,
             original_image_bytes=original_image_bytes
         )

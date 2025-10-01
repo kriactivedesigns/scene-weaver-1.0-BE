@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from .... import models, schemas
 import uuid
 from ....services.storage import storage_provider
-from .... import ai_services
+from ....services.ai_services import generative_services
 import logging
 
 logger = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ async def create_animatics_for_scene(db: Session, project_id: uuid.UUID, scene_i
 
         # Await the async AI service call to get the video bytes
         logger.debug(f"Generating animatics video for scene {scene_id}")
-        video_bytes = await ai_services.generate_animatics_video_from_references(
+        video_bytes = await generative_services.generate_animatics_video_from_references(
             prompt=plain_text_prompt,
             storyboard_image_path=storyboard.imagePath,
             character_image_paths=character_image_paths,

@@ -4,7 +4,7 @@ import uuid
 import logging
 from .... import schemas
 from ...dependencies import get_db
-from .... import ai_services
+from ....services.ai_services import generative_services
 from ..crud.projects import get_project
 from ..crud.story import get_story_for_project, create_or_update_story_for_project, get_story, update_story, delete_story
 from ..crud.story import get_characters_for_project, get_storythreads_for_project, get_worlds_for_project
@@ -55,7 +55,7 @@ def generate_story_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
         logger.debug(f"Generating story with context: {len(threads)} threads, {len(characters)} characters, {len(worlds)} worlds")
         
         # Call the AI service to generate the story
-        generated_story = ai_services.generate_story_from_project_context(project_context=project_context)
+        generated_story = generative_services.generate_story_from_project_context(project_context=project_context)
 
         if not generated_story:
             logger.error(f"AI service returned empty story for project: {project_id}")

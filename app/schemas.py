@@ -13,8 +13,11 @@ class ProjectBase(BaseModel):
 class ProjectCreate(ProjectBase):
     pass
 
-class ProjectUpdate(ProjectBase):
-    pass
+class ProjectUpdate(BaseModel):
+    projectName: Optional[str] = None
+    description: Optional[str] = None
+    aspectRatio: Optional[str] = None
+    visualStyle: Optional[str] = None
 
 class Project(ProjectBase):
     id: uuid.UUID

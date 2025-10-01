@@ -44,6 +44,35 @@ def create_project(db: Session, project: schemas.ProjectCreate) -> models.Projec
         logger.error(f"Unexpected error creating project {project.projectName}: {str(e)}")
         raise
 
+def update_project(db: Session, project_id: uuid.UUID, project_update: schemas.ProjectUpdate) -> Optional[models.Project]:
+    """Update an existing project with partial data."""
+    try:
+        db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
+        if not db_project:
+            logger.warning(f"Project not found for update: {project_id}")
+            return None
+            
+        # Update only the fields that are provided (not None)
+        update_data = project_update.model_dump(exclude_unset=True)
+        
+        for field, value in update_data.items():
+            if hasattr(db_project, field):
+                setattr(db_project, field, value)
+                
+        db.commit()
+        db.refresh(db_project)
+        logger.info(f"Successfully updated project: {db_project.projectName} ({db_project.id})")
+        return db_project
+        
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error updating project {project_id}: {str(e)}")
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error updating project {project_id}: {str(e)}")
+        raise
+
 def delete_project(db: Session, project_id: uuid.UUID) -> bool:
     """
     Deletes a project and all of its associated entities and cloud assets.

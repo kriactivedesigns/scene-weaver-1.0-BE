@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import models
 from .database import engine
+from .middleware import AuthenticationMiddleware
 from .api.v1.endpoints import projects, worlds, characters, storythread, story, screenplay, storyboard, animatics, auth # Import projects router
 
 # Configure logging
@@ -66,6 +67,9 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
+    swagger_ui_parameters={
+        "persistAuthorization": True,  # Keep authorization after page refresh
+    },
     tags_metadata=[
         {
             "name": "Projects",
@@ -106,6 +110,44 @@ app = FastAPI(
     ]
 )
 
+# Add OAuth2 security scheme for Swagger UI
+from fastapi.openapi.utils import get_openapi
+from fastapi.security import HTTPBearer
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    # Add security scheme
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Enter your JWT token in the format: your_token_here"
+        }
+    }
+    
+    # Add global security requirement (except for auth endpoints)
+    for path, path_item in openapi_schema["paths"].items():
+        # Skip auth endpoints (login, signup, refresh)
+        if not path.startswith("/api/v1/auth/") or path.endswith("/me"):
+            for method, operation in path_item.items():
+                if method.lower() in ["get", "post", "put", "delete", "patch"]:
+                    operation["security"] = [{"BearerAuth": []}]
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
 # Define the list of allowed origins
 # For development, this includes typical localhost port for frontend frameworks.
 # We  must add the production domain before deploying
@@ -123,6 +165,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# Add authentication middleware to automatically secure all protected routes
+app.add_middleware(AuthenticationMiddleware)
 
 # Include the router for the projects endpoints
 app.include_router(

@@ -1,36 +1,13 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from ....api.dependencies import get_db
-from ....services.security import create_tokens, verify_token, refresh_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from ....services.security import create_tokens, refresh_access_token
 from .... import schemas, models
 from ..crud import user as user_crud
+from ....middleware.auth import get_current_user_from_request
 
 router = APIRouter()
-
-# OAuth2 scheme for token authentication
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
-    """Get the current authenticated user from JWT token."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    token_data = verify_token(token, credentials_exception)
-    user = user_crud.get_user_by_email(db, email=token_data.email)
-    if user is None:
-        raise credentials_exception
-    return user
-
-def get_current_active_user(current_user: models.User = Depends(get_current_user)) -> models.User:
-    """Get the current active user."""
-    if not current_user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
-    return current_user
 
 @router.post("/signup", response_model=schemas.UserAuthResponse)
 def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -75,13 +52,8 @@ def refresh_token(refresh_request: schemas.TokenRefreshRequest):
         "access_token": new_access_token
     }
 
-@router.get("/me", response_model=schemas.User)
-def read_users_me(current_user: models.User = Depends(get_current_active_user)):
-    """Get current user information."""
+@router.get("/me", response_model=schemas.UserAuth)
+def get_current_user_profile(request: Request):
+    """Get current user profile information."""
+    current_user = get_current_user_from_request(request)
     return current_user
-
-@router.get("/users", response_model=list[schemas.User])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_active_user)):
-    """Get a list of users (requires authentication)."""
-    users = user_crud.get_users(db, skip=skip, limit=limit)
-    return users

@@ -3,6 +3,61 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional
 
+# User Schemas
+class UserBase(BaseModel):
+    name: str
+    email: str
+
+class UserCreate(UserBase):
+    password: str
+
+class UserLogin(BaseModel):
+    """Schema for user login requests - accepts JSON payload"""
+    email: str
+    password: str
+
+class UserAuth(UserBase):
+    """User schema for authentication responses - minimal user data without relationships"""
+    id: uuid.UUID
+    is_active: bool
+    createdAt: datetime
+    updatedAt: datetime
+
+    class Config:
+        from_attributes = True
+
+class User(UserBase):
+    """Full user schema with relationships - for detailed user endpoints"""
+    id: uuid.UUID
+    is_active: bool
+    createdAt: datetime
+    updatedAt: datetime
+    projects: List["Project"] = []
+
+    class Config:
+        from_attributes = True
+
+# Token Schemas
+class Token(BaseModel):
+    access_token: str
+
+class TokenData(BaseModel):
+    email: Optional[str] = None
+
+class UserAuthResponse(BaseModel):
+    """Response model for login and signup that includes user and both tokens"""
+    user: UserAuth
+    access_token: str
+    refresh_token: str
+
+class TokenRefreshRequest(BaseModel):
+    """Request model for token refresh using refresh token"""
+    refresh_token: str
+
+class TokenRefreshResponse(BaseModel):
+    """Response model for token refresh endpoint"""
+    access_token: str
+
 # Project Schemas
 class ProjectBase(BaseModel):
     projectName: str
@@ -21,6 +76,7 @@ class ProjectUpdate(BaseModel):
 
 class Project(ProjectBase):
     id: uuid.UUID
+    owner_id: uuid.UUID
     createdAt: datetime
     updatedAt: datetime
 

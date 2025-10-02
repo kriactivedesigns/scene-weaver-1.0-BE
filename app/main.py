@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import models
 from .database import engine
-from .api.v1.endpoints import projects, worlds, characters, storythread, story, screenplay, storyboard, animatics # Import projects router
+from .api.v1.endpoints import projects, worlds, characters, storythread, story, screenplay, storyboard, animatics, auth # Import projects router
 
 # Configure logging
 logging.basicConfig(
@@ -98,6 +98,10 @@ app = FastAPI(
         {
             "name": "Animatics",
             "description": "Create animated sequences and videos"
+        },
+        {
+            "name": "Authentication",
+            "description": "User authentication and authorization"
         }
     ]
 )
@@ -174,6 +178,13 @@ app.include_router(
     animatics.router,
     prefix="/api/v1",
     tags=["Animatics"]
+)
+
+# Include the router for Authentication
+app.include_router(
+    auth.router,
+    prefix="/api/v1/auth",
+    tags=["Authentication"]
 )
 
 @app.get("/")

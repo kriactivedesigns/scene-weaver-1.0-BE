@@ -28,7 +28,7 @@ class User(Base):
 class Project(Base):
     __tablename__ = "Projects"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    owner_id = Column(UUID(as_uuid=True), ForeignKey("Users.id"), nullable=False)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("Users.id"), nullable=False, index=True)  # Add index for performance
     projectName = Column(String(255), nullable=False)
     aspectRatio = Column(String(50), nullable=False, default="16:9")
     visualStyle = Column(String(100))
@@ -46,7 +46,7 @@ class Project(Base):
 class World(Base):
     __tablename__ = "Worlds"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False)
+    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False, index=True)  # Add index
     name = Column(String(255), nullable=False)
     description = Column(Text)
     imagePath = Column(String, nullable=True) 
@@ -58,7 +58,7 @@ class World(Base):
 class Character(Base):
     __tablename__ = "Characters"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False)
+    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False, index=True)  # Add index
     name = Column(String(255), nullable=False)
     description = Column(Text)
     imagePath = Column(String, nullable=True) 
@@ -70,7 +70,7 @@ class Character(Base):
 class StoryThread(Base):
     __tablename__ = "StoryThreads"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False)
+    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False, index=True)  # Add index
     content = Column(Text, nullable=False)
     order = Column("order", Integer, nullable=False)
     createdAt = Column(TIMESTAMP(timezone=True), server_default=func.now())
@@ -93,7 +93,7 @@ class Story(Base):
 class ScreenplayScene(Base):
     __tablename__ = "ScreenplayScenes"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False)
+    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False, index=True)  # Add index
     sceneNumber = Column(Integer, nullable=False)
     duration = Column(Integer, nullable=False)
     content = Column(Text)
@@ -107,8 +107,8 @@ class ScreenplayScene(Base):
 class StoryboardImage(Base):
     __tablename__ = "StoryboardImages"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False)
-    sceneId = Column(UUID(as_uuid=True), ForeignKey("ScreenplayScenes.id"), nullable=False, unique=True)
+    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False, index=True)  # Add index
+    sceneId = Column(UUID(as_uuid=True), ForeignKey("ScreenplayScenes.id"), nullable=False, unique=True, index=True)  # Add index
     aspectRatio = Column(String(50), nullable=False)
     prompt = Column(Text, nullable=False)
     imagePath = Column(String(255), nullable=False)
@@ -121,8 +121,8 @@ class StoryboardImage(Base):
 class AnimaticsScene(Base):
     __tablename__ = "AnimaticScenes"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False)
-    sceneId = Column(UUID(as_uuid=True), ForeignKey("ScreenplayScenes.id"), nullable=False, unique=True)
+    projectId = Column(UUID(as_uuid=True), ForeignKey("Projects.id"), nullable=False, index=True)  # Add index
+    sceneId = Column(UUID(as_uuid=True), ForeignKey("ScreenplayScenes.id"), nullable=False, unique=True, index=True)  # Add index
     duration = Column(Integer, nullable=False)
     aspectRatio = Column(String(50), nullable=False)
     videoPath = Column(String(255), nullable=False)

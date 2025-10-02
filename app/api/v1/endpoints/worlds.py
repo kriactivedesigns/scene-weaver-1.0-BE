@@ -11,9 +11,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/projects/{project_id}/worlds", response_model=schemas.World, status_code=status.HTTP_201_CREATED)
-def create_world_for_project_route(project_id: uuid.UUID, world: schemas.WorldCreate, db: Session = Depends(get_db)):
+async def create_world_for_project_route(project_id: uuid.UUID, world: schemas.WorldCreate, db: Session = Depends(get_db)):
     """
-    Creates a World for a project and synchronously generates its image.
+    Creates a World for a project and generates its image.
+    If image generation fails, the world will be deleted from the database.
     
     Args:
         project_id: UUID of the project to add the world to
@@ -28,7 +29,7 @@ def create_world_for_project_route(project_id: uuid.UUID, world: schemas.WorldCr
     """
     try:
         logger.info(f"Creating world '{world.name}' for project: {project_id}")
-        db_world = create_world(db=db, project_id=project_id, world=world)
+        db_world = await create_world(db=db, project_id=project_id, world=world)
         logger.info(f"Successfully created world: {db_world.id}")
         return db_world
     except ValueError as e:
@@ -182,9 +183,9 @@ def delete_world_route(world_id: uuid.UUID, db: Session = Depends(get_db)):
         )
 
 @router.put("/worlds/{world_id}/update-image", response_model=schemas.World, status_code=status.HTTP_200_OK)
-def generate_world_image_route(world_id: uuid.UUID, request: schemas.ImageGenerateRequest, db: Session = Depends(get_db)):
+async def generate_world_image_route(world_id: uuid.UUID, request: schemas.ImageGenerateRequest, db: Session = Depends(get_db)):
     """
-    Synchronously updates a world's image by regenerating it based on a new prompt.
+    Updates a world's image by regenerating it based on a new prompt.
     
     Args:
         world_id: UUID of the world to update the image for
@@ -199,7 +200,7 @@ def generate_world_image_route(world_id: uuid.UUID, request: schemas.ImageGenera
     """
     try:
         logger.info(f"Updating image for world: {world_id}")
-        db_world = update_world_image(db=db, world_id=world_id, new_prompt=request.prompt)
+        db_world = await update_world_image(db=db, world_id=world_id, new_prompt=request.prompt)
         logger.info(f"Successfully updated image for world: {world_id}")
         return db_world
     except (ValueError, IOError) as e:

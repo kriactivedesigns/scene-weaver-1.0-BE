@@ -17,7 +17,7 @@ class Project(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     projectName = Column(String(255), nullable=False)
     aspectRatio = Column(String(50), nullable=False, default="16:9")
-    visualStyle = Column(String(100), default="Dynamic Line Art (Gesture Drawing)")
+    visualStyle = Column(String(100))
     description = Column(Text)
     createdAt = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updatedAt = Column(TIMESTAMP(timezone=True), default=func.now(), onupdate=func.now())

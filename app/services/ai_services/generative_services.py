@@ -11,17 +11,17 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-def generate_image_from_prompt(prompt: str, aspect_ratio: str) -> bytes:
+async def generate_image_from_prompt(prompt: str, aspect_ratio: str) -> bytes:
     """
     Generates an image from a text prompt using the configured AI provider.
     """
-    return ai_provider.generate_image_from_prompt(prompt, aspect_ratio)
+    return await ai_provider.generate_image_from_prompt(prompt, aspect_ratio)
 
-def edit_image_from_prompt(prompt: str, original_image_bytes: bytes) -> bytes | None:
+async def edit_image_from_prompt(prompt: str, original_image_bytes: bytes) -> bytes | None:
     """
     Edits an existing image using the configured AI provider.
     """
-    return ai_provider.edit_image_from_prompt(prompt, original_image_bytes)
+    return await ai_provider.edit_image_from_prompt(prompt, original_image_bytes)
     
 def generate_story_from_project_context(project_context: Dict[str, Any]) -> str:
     """

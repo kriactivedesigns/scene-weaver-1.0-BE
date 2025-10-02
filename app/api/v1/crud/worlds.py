@@ -18,10 +18,9 @@ def get_worlds_by_project(db: Session, project_id: uuid.UUID, skip: int = 0, lim
     """Get all worlds for a project with pagination."""
     return db.query(models.World).filter(models.World.projectId == project_id).offset(skip).limit(limit).all()
 
-def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid.UUID) -> models.World:
+async def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid.UUID) -> models.World:
     """
-    Synchronously creates a world, generates its image, uploads it to storage,
-    and returns the final, complete world object.
+    Creates a world with image generation. If image generation fails, the world will be deleted.
     
     Args:
         db: Database session
@@ -35,6 +34,7 @@ def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid.UUID)
         ValueError: If project is not found
         SQLAlchemyError: If database operation fails
     """
+    db_world = None
     try:
         # Verify project exists
         db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -54,7 +54,7 @@ def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid.UUID)
             try:
                 logger.debug(f"Generating image for world: {db_world.id}")
                 full_prompt = prompt_builder.build_world_prompt(db_world.description, db_project.visualStyle)
-                image_bytes = generative_services.generate_image_from_prompt(
+                image_bytes = await generative_services.generate_image_from_prompt(
                     prompt=full_prompt, 
                     aspect_ratio=db_project.aspectRatio
                 )
@@ -73,24 +73,44 @@ def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid.UUID)
                         db.refresh(db_world)
                         logger.info(f"Successfully generated and uploaded image for world: {db_world.id}")
                     else:
-                        logger.warning(f"Failed to upload world image for world {db_world.id}")
+                        logger.error(f"Failed to upload world image for world {db_world.id}")
+                        # Delete world if image upload fails
+                        db.delete(db_world)
+                        db.commit()
+                        raise Exception("Failed to upload world image")
                 else:
-                    logger.warning(f"AI service failed to generate image for world {db_world.id}")
+                    logger.error(f"AI service failed to generate image for world {db_world.id}")
+                    # Delete world if image generation fails
+                    db.delete(db_world)
+                    db.commit()
+                    raise Exception("AI service failed to generate image")
             except Exception as e:
                 logger.error(f"Error during image generation for world {db_world.id}: {str(e)}")
-                # Continue without image - world creation should not fail due to image generation issues
+                # Delete world if any part of image generation fails
+                if db_world:
+                    try:
+                        db.delete(db_world)
+                        db.commit()
+                        logger.info(f"Deleted world {db_world.id} due to image generation failure")
+                    except Exception as cleanup_error:
+                        logger.error(f"Failed to cleanup world after image generation failure: {cleanup_error}")
+                        db.rollback()
+                raise Exception(f"World creation failed due to image generation error: {str(e)}")
         
         return db_world
         
     except ValueError:
-        db.rollback()
+        if db_world:
+            db.rollback()
         raise  # Re-raise validation errors
     except SQLAlchemyError as e:
-        db.rollback()
+        if db_world:
+            db.rollback()
         logger.error(f"Database error creating world: {str(e)}")
         raise
     except Exception as e:
-        db.rollback()
+        if db_world:
+            db.rollback()
         logger.error(f"Unexpected error creating world: {str(e)}")
         raise
 
@@ -128,7 +148,7 @@ def update_world(db: Session, world_id: uuid.UUID, world: schemas.WorldUpdate) -
         logger.error(f"Unexpected error updating world {world_id}: {str(e)}")
         raise
 
-def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str) -> models.World:
+async def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str) -> models.World:
     """
     Synchronously updates a world's image by downloading from storage,
     editing with AI, and re-uploading the new image.
@@ -168,7 +188,7 @@ def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str) -> mod
 
         # Generate new image
         full_prompt = prompt_builder.build_modify_world_prompt(new_prompt, db_project.visualStyle)
-        new_image_bytes = generative_services.edit_image_from_prompt(full_prompt, original_image_bytes)
+        new_image_bytes = await generative_services.edit_image_from_prompt(full_prompt, original_image_bytes)
         if not new_image_bytes:
             raise Exception("AI service failed to generate edited image.")
 

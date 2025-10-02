@@ -11,9 +11,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/projects/{project_id}/characters", response_model=schemas.Character, status_code=status.HTTP_201_CREATED)
-def create_character_for_project_route(project_id: uuid.UUID, character: schemas.CharacterCreate, db: Session = Depends(get_db)):
+async def create_character_for_project_route(project_id: uuid.UUID, character: schemas.CharacterCreate, db: Session = Depends(get_db)):
     """
     Creates a Character for a project and generates an initial image based on its description.
+    If image generation fails, the character will be deleted from the database.
     
     Args:
         project_id: UUID of the project to add the character to
@@ -28,8 +29,8 @@ def create_character_for_project_route(project_id: uuid.UUID, character: schemas
     """
     try:
         logger.info(f"Creating character '{character.name}' for project: {project_id}")
-        # Call the single CRUD function that handles the entire synchronous process
-        db_character = create_character(
+        # Call the async CRUD function that handles the entire process
+        db_character = await create_character(
             db=db, 
             project_id=project_id, 
             character=character
@@ -190,9 +191,9 @@ def delete_character_route(character_id: uuid.UUID, db: Session = Depends(get_db
         )
 
 @router.put("/characters/{character_id}/update-image", response_model=schemas.Character, status_code=status.HTTP_200_OK)
-def update_character_image_route(character_id: uuid.UUID, request: schemas.ImageGenerateRequest, db: Session = Depends(get_db)):
+async def update_character_image_route(character_id: uuid.UUID, request: schemas.ImageGenerateRequest, db: Session = Depends(get_db)):
     """
-    Synchronously updates a character's image by regenerating it based on a new prompt.
+    Updates a character's image by regenerating it based on a new prompt.
     
     Args:
         character_id: UUID of the character to update the image for
@@ -207,8 +208,8 @@ def update_character_image_route(character_id: uuid.UUID, request: schemas.Image
     """
     try:
         logger.info(f"Updating image for character: {character_id}")
-        # Call the single CRUD function that handles the entire synchronous process
-        db_character = update_character_image(
+        # Call the async CRUD function that handles the entire process
+        db_character = await update_character_image(
             db=db, 
             character_id=character_id, 
             new_prompt=request.prompt

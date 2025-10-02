@@ -7,8 +7,8 @@ from typing import List, Optional
 class ProjectBase(BaseModel):
     projectName: str
     description: Optional[str] = None
-    aspectRatio: Optional[str] = "16:9"
-    visualStyle: Optional[str] = "Dynamic Line Art (Gesture Drawing)"
+    aspectRatio: Optional[str] = None
+    visualStyle: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     pass

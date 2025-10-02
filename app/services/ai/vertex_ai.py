@@ -36,7 +36,7 @@ class VertexAIProvider(AIProvider):
             location=os.getenv("GOOGLE_CLOUD_LOCATION")
         )
     
-    def generate_image_from_prompt(self, prompt: str, aspect_ratio: str) -> Optional[bytes]:
+    async def generate_image_from_prompt(self, prompt: str, aspect_ratio: str) -> Optional[bytes]:
         """
         Generates an image from a text prompt using Vertex AI's Imagen 3 model.
         """
@@ -47,7 +47,9 @@ class VertexAIProvider(AIProvider):
         try:
             logger.info(f"Generating image with prompt: '{prompt[:80]}...'")
             model = ImageGenerationModel.from_pretrained(os.getenv("IMAGE_GENERATION_MODEL"))
-            response = model.generate_images(
+            
+            response = await asyncio.to_thread(
+                model.generate_images,
                 prompt=prompt,
                 number_of_images=1,
                 aspect_ratio=aspect_ratio
@@ -64,19 +66,18 @@ class VertexAIProvider(AIProvider):
             logger.error(f"An error occurred during image generation: {e}")
             return None
 
-    def edit_image_from_prompt(self, prompt: str, original_image_bytes: bytes) -> Optional[bytes]:
+    async def edit_image_from_prompt(self, prompt: str, original_image_bytes: bytes) -> Optional[bytes]:
         """
-        Placeholder for modifying an existing image.
-        For now, regenerates the image with a new combined prompt.
+        Edits an existing image using Vertex AI.
         """
-        
-        model = ImageGenerationModel.from_pretrained("imagegeneration@002")
-        base_image = Image(image_bytes=original_image_bytes)
-        logger.info("base_image bytes length: %d", len(original_image_bytes))
-        logger.info(f"Re-generating image for editing with new prompt: {prompt}")
-
         try:
-            response = model.edit_image(
+            model = ImageGenerationModel.from_pretrained("imagegeneration@006")
+            base_image = Image(image_bytes=original_image_bytes)
+            logger.info("base_image bytes length: %d", len(original_image_bytes))
+            logger.info(f"Re-generating image for editing with new prompt: {prompt}")
+
+            response = await asyncio.to_thread(
+                model.edit_image,
                 base_image=base_image,
                 prompt=prompt,
                 seed=50,
@@ -84,6 +85,7 @@ class VertexAIProvider(AIProvider):
                 number_of_images=1,
                 edit_mode=["inpainting-insert", "inpainting-remove", "outpainting"]
             )
+            
             logger.info("Image edit response: %s", response)
             if response.images[0]:
                 logger.info("Image generated successfully.")

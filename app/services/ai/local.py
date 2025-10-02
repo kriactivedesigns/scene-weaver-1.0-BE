@@ -8,6 +8,7 @@ from .base import AIProvider
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+timeout_config = httpx.Timeout(900.0, read=300.0, write=300.0, connect=30.0)
 
 class LocalAIProvider(AIProvider):
     """
@@ -28,7 +29,7 @@ class LocalAIProvider(AIProvider):
         }
 
         # Use an async client for making requests
-        self.client = httpx.AsyncClient(base_url=self.base_url, headers=self.headers, timeout=300.0)
+        self.client = httpx.AsyncClient(base_url=self.base_url, headers=self.headers, timeout=timeout_config)
         
         logger.info(f"🏠 Initialized Local AI Provider, connected to: {self.base_url}")
     
@@ -93,6 +94,8 @@ class LocalAIProvider(AIProvider):
             logger.error(f"[Local AI] An unexpected error occurred during image editing: {e}")
             return None
 
+
+# Mock implementations
     def generate_story_from_project_context(self, project_context: Dict[str, Any]) -> str:
         """
         Mock implementation that generates a simple story template.
@@ -220,14 +223,14 @@ And so our heroes embarked on their greatest adventure yet, facing challenges th
         """
         Mock implementation that returns a placeholder storyboard image.
         """
-        logger.info(f"[LOCAL MOCK] Generating storyboard image for: '{prompt[:80]}...'")
-        logger.info(f"[LOCAL MOCK] Using {len(character_image_paths)} character refs and {len(world_image_paths)} world refs")
+        logger.info(f"[LOCAL] Generating storyboard image for: '{prompt[:80]}...'")
+        logger.info(f"[LOCAL] Using {len(character_image_paths)} character refs and {len(world_image_paths)} world refs")
         
         # Simulate some processing time
         await asyncio.sleep(0.5)
         
         # Return the same mock PNG as generate_image_from_prompt
-        return self.generate_image_from_prompt(prompt, "16:9")
+        return await self.generate_image_from_prompt(prompt, "16:9")
 
     async def generate_animatics_video_from_references(
         self,

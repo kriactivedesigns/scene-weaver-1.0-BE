@@ -28,7 +28,7 @@ def create_project(db: Session, project: schemas.ProjectCreate) -> models.Projec
             projectName=project.projectName,
             description=project.description,
             aspectRatio=project.aspectRatio or "16:9",
-            visualStyle=project.visualStyle or "Dynamic Line Art (Gesture Drawing)"
+            visualStyle=project.visualStyle or "Monochromatic B&W Dynamic Sketch"
         )
         db.add(db_project)
         db.commit()

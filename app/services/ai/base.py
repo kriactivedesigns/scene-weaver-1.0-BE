@@ -9,7 +9,7 @@ class AIProvider(ABC):
     """
     
     @abstractmethod
-    def generate_image_from_prompt(self, prompt: str, aspect_ratio: str) -> Optional[bytes]:
+    async def generate_image_from_prompt(self, prompt: str, aspect_ratio: str) -> Optional[bytes]:
         """
         Generates an image from a text prompt.
 
@@ -23,7 +23,7 @@ class AIProvider(ABC):
         pass
 
     @abstractmethod
-    def edit_image_from_prompt(self, prompt: str, original_image_bytes: bytes) -> Optional[bytes]:
+    async def edit_image_from_prompt(self, prompt: str, original_image_bytes: bytes) -> Optional[bytes]:
         """
         Edits an existing image based on a text prompt.
 

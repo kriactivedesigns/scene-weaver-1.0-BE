@@ -18,9 +18,10 @@ def get_characters_by_project(db: Session, project_id: uuid.UUID, skip: int = 0,
     """Get all characters for a project with pagination."""
     return db.query(models.Character).filter(models.Character.projectId == project_id).offset(skip).limit(limit).all()
 
-def create_character(db: Session, character: schemas.CharacterCreate, project_id: uuid.UUID) -> models.Character:
+async def create_character(db: Session, character: schemas.CharacterCreate, project_id: uuid.UUID) -> models.Character:
     """
     Create a new character with optional image generation.
+    If image generation fails, the character will be deleted from the database.
     
     Args:
         db: Database session
@@ -34,6 +35,7 @@ def create_character(db: Session, character: schemas.CharacterCreate, project_id
         ValueError: If project is not found
         SQLAlchemyError: If database operation fails
     """
+    db_character = None
     try:
         # Verify project exists
         db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
@@ -53,7 +55,7 @@ def create_character(db: Session, character: schemas.CharacterCreate, project_id
             try:
                 logger.debug(f"Generating image for character: {db_character.id}")
                 full_prompt = prompt_builder.build_character_prompt(db_character.description, db_project.visualStyle)
-                image_bytes = generative_services.generate_image_from_prompt(prompt=full_prompt, aspect_ratio="3:4")
+                image_bytes = await generative_services.generate_image_from_prompt(prompt=full_prompt, aspect_ratio="3:4")
                 
                 if image_bytes:
                     # Save the generated image using the storage provider
@@ -69,24 +71,31 @@ def create_character(db: Session, character: schemas.CharacterCreate, project_id
                         db.refresh(db_character)
                         logger.info(f"Successfully generated and uploaded image for character: {db_character.id}")
                     else:
-                        logger.warning(f"Failed to upload character image for character {db_character.id}")
+                        raise Exception("Failed to upload character image")
                 else:
-                    logger.warning(f"AI service failed to generate image for character {db_character.id}")
+                    raise Exception("AI service failed to generate image")
             except Exception as e:
                 logger.error(f"Error during image generation for character {db_character.id}: {str(e)}")
-                # Continue without image - character creation should not fail due to image generation issues
+                # Delete character if any part of image generation fails
+                db.rollback()
+                logger.info(f"Rolled back character creation {db_character.id} due to image generation failure")
+                db.rollback()
+                raise Exception(f"Character creation failed due to image generation error: {str(e)}")
         
         return db_character
         
     except ValueError:
-        db.rollback()
+        if db_character:
+            db.rollback()
         raise  # Re-raise validation errors
     except SQLAlchemyError as e:
-        db.rollback()
+        if db_character:
+            db.rollback()
         logger.error(f"Database error creating character: {str(e)}")
         raise
     except Exception as e:
-        db.rollback()
+        if db_character:
+            db.rollback()
         logger.error(f"Unexpected error creating character: {str(e)}")
         raise
 
@@ -124,7 +133,7 @@ def update_character(db: Session, character_id: uuid.UUID, character: schemas.Ch
         logger.error(f"Unexpected error updating character {character_id}: {str(e)}")
         raise
 
-def update_character_image(db: Session, character_id: uuid.UUID, new_prompt: str) -> models.Character:
+async def update_character_image(db: Session, character_id: uuid.UUID, new_prompt: str) -> models.Character:
     """
     Updates a character's image by generating a new one based on an additional prompt.
     The new prompt is combined with the original description for context.
@@ -172,7 +181,7 @@ def update_character_image(db: Session, character_id: uuid.UUID, new_prompt: str
         
         logger.info("Full prompt: %s", full_prompt)
         
-        new_image_bytes = generative_services.edit_image_from_prompt(
+        new_image_bytes = await generative_services.edit_image_from_prompt(
             prompt=full_prompt,
             original_image_bytes=original_image_bytes
         )

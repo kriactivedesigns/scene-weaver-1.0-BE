@@ -9,9 +9,10 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from sqlalchemy.orm import Session
 from ..database import SessionLocal
-from ..services.security import verify_token
+from ..services.security import verify_token_with_detailed_error
 from ..api.v1.crud import user as user_crud
 from .. import models
+from ..config import get_cors_headers
 
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
@@ -65,15 +66,20 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             return response
             
         except HTTPException as e:
+            # Get origin from request for proper CORS handling
+            origin = request.headers.get("origin")
             return JSONResponse(
                 status_code=e.status_code,
                 content={"detail": e.detail},
-                headers=e.headers or {}
+                headers=get_cors_headers(origin)
             )
-        except Exception as e:
+        except Exception as ex:
+            # Get origin from request for proper CORS handling
+            origin = request.headers.get("origin")
             return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={"detail": "Internal server error"}
+                status_code=500,
+                content={"detail": "Internal server error"},
+                headers=get_cors_headers(origin)
             )
     
     def _is_public_route(self, path: str) -> bool:
@@ -88,50 +94,29 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         # Get Authorization header
         authorization = request.headers.get("Authorization")
         if not authorization:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authorization header missing",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
+            raise HTTPException(status_code=401, detail="Unauthorized")
         
         # Extract token from "Bearer <token>" format
         try:
             scheme, token = authorization.split()
             if scheme.lower() != "bearer":
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid authentication scheme",
-                    headers={"WWW-Authenticate": "Bearer"}
-                )
+                raise HTTPException(status_code=401, detail="Unauthorized")
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authorization header format",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
-        
-        # Validate token
-        credentials_exception = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-        
-        token_data = verify_token(token, credentials_exception)
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        # Validate token with detailed error messages
+        token_data = verify_token_with_detailed_error(token)
         
         # Get user from database
         db = SessionLocal()
         try:
             user = user_crud.get_user_by_email(db, email=token_data.email)
             if user is None:
-                raise credentials_exception
+                raise HTTPException(status_code=401, detail="Unauthorized")
             
             # Check if user is active
             if not user.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="User account is inactive"
-                )
+                raise HTTPException(status_code=401, detail="Unauthorized")
             
             return user
         finally:

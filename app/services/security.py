@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
 from ..schemas import TokenData
@@ -77,11 +78,7 @@ def refresh_access_token(refresh_token: str) -> str:
         token_type: str = payload.get("type")
         
         if email is None or token_type != "refresh":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise HTTPException(status_code=401, detail="Unauthorized")
         
         # Create new access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -90,12 +87,10 @@ def refresh_access_token(refresh_token: str) -> str:
         )
         return new_access_token
         
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 def verify_refresh_token(token: str) -> TokenData:
     """Verify and decode a refresh token."""
@@ -105,19 +100,13 @@ def verify_refresh_token(token: str) -> TokenData:
         token_type: str = payload.get("type")
         
         if email is None or token_type != "refresh":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            raise HTTPException(status_code=401, detail="Unauthorized")
         
         return TokenData(email=email)
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 def verify_token(token: str, credentials_exception: HTTPException) -> TokenData:
     """Verify and decode a JWT access token."""
@@ -133,3 +122,39 @@ def verify_token(token: str, credentials_exception: HTTPException) -> TokenData:
         return token_data
     except JWTError:
         raise credentials_exception
+
+def verify_token_with_detailed_error(token: str) -> TokenData:
+    """
+    Verify and decode a JWT access token.
+    
+    Returns:
+        TokenData: The decoded token data
+        
+    Raises:
+        HTTPException: 
+            - 401 for invalid tokens
+            - 401 for expired tokens
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        token_type: str = payload.get("type")
+        
+        if email is None or token_type != "access":
+            raise HTTPException(
+                status_code=401,
+                detail="Unauthorized"
+            )
+        
+        return TokenData(email=email)
+        
+    except ExpiredSignatureError:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized"
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Unauthorized"
+        )

@@ -150,20 +150,27 @@ app.openapi = custom_openapi
 
 # Define the list of allowed origins
 # For development, this includes typical localhost port for frontend frameworks.
-# We  must add the production domain before deploying
+# We must add the production domain before deploying
+
+# Development origins (specific domains for security)
 origins = [
     "http://localhost",
     "http://localhost:4200",
     "https://www.causalsyntax.com",
 ]
 
+# For development only - uncomment the line below to allow all origins
+# WARNING: Never use "*" in production!
+# origins = ["*"]
+
 # Add the CORS middleware to the application.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Add authentication middleware to automatically secure all protected routes

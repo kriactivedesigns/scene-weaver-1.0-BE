@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from fastapi import HTTPException, status
 from .... import models, schemas
+from ....services.user_context import UserContextService
 import uuid
 import logging
 from typing import List, Optional
@@ -12,24 +14,31 @@ from .animatics import delete_animatics
 logger = logging.getLogger(__name__)
 
 # Project CRUD functions
-def get_project(db: Session, project_id: uuid.UUID) -> Optional[models.Project]:
-    """Get a single project by ID."""
+def get_project(db: Session, project_id: uuid.UUID, user_context: UserContextService) -> Optional[models.Project]:
+    """Get a single project by ID with user validation."""
+    # Validate user owns this project
+    if not user_context.user_owns_project(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
     return db.query(models.Project).filter(models.Project.id == project_id).first()
 
-def get_projects(db: Session, skip: int = 0, limit: int = 100) -> List[models.Project]:
-    """Get all projects with pagination."""
-    return db.query(models.Project).offset(skip).limit(limit).all()
+def get_projects(db: Session, user_context: UserContextService, skip: int = 0, limit: int = 100) -> List[models.Project]:
+    """Get all projects for the current user with pagination."""
+    return db.query(models.Project).filter(models.Project.owner_id == user_context.get_user_id()).offset(skip).limit(limit).all()
 
-def create_project(db: Session, project: schemas.ProjectCreate) -> models.Project:
-    """Create a new project."""
+def create_project(db: Session, project: schemas.ProjectCreate, user_context: UserContextService) -> models.Project:
+    """Create a new project with user ownership."""
     try:
-        # Create a SQLAlchemy model instance from the Pydantic schema
-        db_project = models.Project(
-            projectName=project.projectName,
-            description=project.description,
-            aspectRatio=project.aspectRatio or "16:9",
-            visualStyle=project.visualStyle or "Monochromatic B&W Dynamic Sketch"
-        )
+        # Prepare project data and assign user ownership
+        project_data = project.model_dump()
+        project_data = user_context.assign_user_ownership(project_data)
+        
+        # Set default values
+        project_data['aspectRatio'] = project_data.get('aspectRatio') or "16:9"
+        project_data['visualStyle'] = project_data.get('visualStyle') or "Monochromatic B&W Dynamic Sketch"
+        
+        # Create a SQLAlchemy model instance
+        db_project = models.Project(**project_data)
         db.add(db_project)
         db.commit()
         db.refresh(db_project)
@@ -44,9 +53,13 @@ def create_project(db: Session, project: schemas.ProjectCreate) -> models.Projec
         logger.error(f"Unexpected error creating project {project.projectName}: {str(e)}")
         raise
 
-def update_project(db: Session, project_id: uuid.UUID, project_update: schemas.ProjectUpdate) -> Optional[models.Project]:
-    """Update an existing project with partial data."""
+def update_project(db: Session, project_id: uuid.UUID, project_update: schemas.ProjectUpdate, user_context: UserContextService) -> Optional[models.Project]:
+    """Update an existing project with partial data and user validation."""
     try:
+        # Validate user owns this project
+        if not user_context.user_owns_project(project_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        
         db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
         if not db_project:
             logger.warning(f"Project not found for update: {project_id}")
@@ -73,7 +86,7 @@ def update_project(db: Session, project_id: uuid.UUID, project_update: schemas.P
         logger.error(f"Unexpected error updating project {project_id}: {str(e)}")
         raise
 
-def delete_project(db: Session, project_id: uuid.UUID) -> bool:
+def delete_project(db: Session, project_id: uuid.UUID, user_context: UserContextService) -> bool:
     """
     Deletes a project and all of its associated entities and cloud assets.
     This function performs a full cascade delete at the application level.
@@ -81,6 +94,7 @@ def delete_project(db: Session, project_id: uuid.UUID) -> bool:
     Args:
         db: Database session
         project_id: UUID of the project to delete
+        user_context: User context for validation
         
     Returns:
         True if deletion was successful, False if project not found
@@ -89,6 +103,10 @@ def delete_project(db: Session, project_id: uuid.UUID) -> bool:
         SQLAlchemyError: If database operation fails
     """
     try:
+        # Validate user owns this project
+        if not user_context.user_owns_project(project_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        
         project_to_delete = db.query(models.Project).filter(models.Project.id == project_id).first()
         if not project_to_delete:
             logger.warning(f"Project not found for deletion: {project_id}")

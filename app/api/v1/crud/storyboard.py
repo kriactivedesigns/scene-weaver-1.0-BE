@@ -1,8 +1,10 @@
 from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 from bs4 import BeautifulSoup
 from .... import models, schemas
+from ....services.user_context import UserContextService
 import uuid
 from ....services.storage import storage_provider
 from ....services.ai_services import generative_services
@@ -11,11 +13,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Storyboard Crud functions
-async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_id: uuid.UUID) -> models.StoryboardImage:
+async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_id: uuid.UUID, user_context: UserContextService) -> models.StoryboardImage:
     """
     Orchestrates the asynchronous creation of a single storyboard image,
     uploading the final asset to Google Cloud Storage.
     """
+    # Validate user owns the project
+    if not user_context.user_owns_project(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
     scene = db.query(models.ScreenplayScene).filter(models.ScreenplayScene.id == scene_id).first()
     if not scene:
         raise ValueError("Scene not found")
@@ -99,23 +105,28 @@ async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_
     db.refresh(db_storyboard)
     return db_storyboard
 
-def get_storyboards_by_project(db: Session, project_id: uuid.UUID) -> List[models.StoryboardImage]:
+def get_storyboards_by_project(db: Session, project_id: uuid.UUID, user_context: UserContextService) -> List[models.StoryboardImage]:
     """
     Retrieves all storyboard images for a given project, ordered by the scene number.
     """
+    # Validate user owns the project
+    if not user_context.user_owns_project(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
     return db.query(models.StoryboardImage)\
         .join(models.ScreenplayScene, models.StoryboardImage.sceneId == models.ScreenplayScene.id)\
         .filter(models.StoryboardImage.projectId == project_id)\
         .order_by(models.ScreenplayScene.sceneNumber)\
         .all()
 
-def get_storyboard_by_id(db: Session, storyboard_id: uuid.UUID) -> Optional[models.StoryboardImage]:
+def get_storyboard_by_id(db: Session, storyboard_id: uuid.UUID, user_context: UserContextService) -> Optional[models.StoryboardImage]:
     """
-    Retrieves a specific storyboard by its ID.
+    Retrieves a specific storyboard by its ID with user validation.
     
     Args:
         db: Database session
         storyboard_id: UUID of the storyboard to retrieve
+        user_context: User context for validation
         
     Returns:
         Storyboard image model if found, None otherwise
@@ -124,6 +135,10 @@ def get_storyboard_by_id(db: Session, storyboard_id: uuid.UUID) -> Optional[mode
         Exception: If database query fails
     """
     try:
+        # Validate user can access this storyboard
+        if not user_context.user_can_access_entity_by_project(storyboard_id, models.StoryboardImage, 'projectId'):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storyboard not found")
+        
         logger.debug(f"Retrieving storyboard: {storyboard_id}")
         
         storyboard = db.query(models.StoryboardImage).filter(
@@ -141,13 +156,14 @@ def get_storyboard_by_id(db: Session, storyboard_id: uuid.UUID) -> Optional[mode
         raise
 
 
-def delete_storyboard(db: Session, storyboard_id: uuid.UUID) -> bool:
+def delete_storyboard(db: Session, storyboard_id: uuid.UUID, user_context: UserContextService) -> bool:
     """
     Finds a storyboard, deletes its image from storage, and then deletes the DB record.
     
     Args:
         db: Database session
         storyboard_id: UUID of the storyboard to delete
+        user_context: User context for validation
         
     Returns:
         True if deleted successfully, False if not found
@@ -156,6 +172,10 @@ def delete_storyboard(db: Session, storyboard_id: uuid.UUID) -> bool:
         Exception: If deletion fails
     """
     try:
+        # Validate user can access this storyboard
+        if not user_context.user_can_access_entity_by_project(storyboard_id, models.StoryboardImage, 'projectId'):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storyboard not found")
+        
         logger.info(f"Deleting storyboard: {storyboard_id}")
         
         db_storyboard = db.query(models.StoryboardImage).filter(

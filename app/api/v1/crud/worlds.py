@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from fastapi import HTTPException, status
 from .... import models, schemas
+from ....services.user_context import UserContextService
 import uuid
 import logging
 from typing import List, Optional
@@ -10,15 +12,23 @@ from ....services.ai_services import prompt_builder, generative_services
 logger = logging.getLogger(__name__)
 
 # World CRUD functions
-def get_world(db: Session, world_id: uuid.UUID) -> Optional[models.World]:
-    """Get a single world by ID."""
+def get_world(db: Session, world_id: uuid.UUID, user_context: UserContextService) -> Optional[models.World]:
+    """Get a single world by ID with user validation."""
+    # Validate user can access this world
+    if not user_context.user_can_access_world(world_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
+    
     return db.query(models.World).filter(models.World.id == world_id).first()
 
-def get_worlds_by_project(db: Session, project_id: uuid.UUID, skip: int = 0, limit: int = 100) -> List[models.World]:
-    """Get all worlds for a project with pagination."""
+def get_worlds_by_project(db: Session, project_id: uuid.UUID, user_context: UserContextService, skip: int = 0, limit: int = 100) -> List[models.World]:
+    """Get all worlds for a project with pagination and user validation."""
+    # Validate user owns the project
+    if not user_context.user_owns_project(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
     return db.query(models.World).filter(models.World.projectId == project_id).offset(skip).limit(limit).all()
 
-async def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid.UUID) -> models.World:
+async def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid.UUID, user_context: UserContextService) -> models.World:
     """
     Creates a world with image generation. If image generation fails, the world will be deleted.
     
@@ -26,6 +36,7 @@ async def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid
         db: Database session
         world: World data to create
         project_id: UUID of the project to add the world to
+        user_context: User context for validation
         
     Returns:
         The created world with optional image path
@@ -36,6 +47,10 @@ async def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid
     """
     db_world = None
     try:
+        # Validate user owns the project
+        if not user_context.user_owns_project(project_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        
         # Verify project exists
         db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
         if not db_project:
@@ -114,7 +129,7 @@ async def create_world(db: Session, world: schemas.WorldCreate, project_id: uuid
         logger.error(f"Unexpected error creating world: {str(e)}")
         raise
 
-def update_world(db: Session, world_id: uuid.UUID, world: schemas.WorldUpdate) -> Optional[models.World]:
+def update_world(db: Session, world_id: uuid.UUID, world: schemas.WorldUpdate, user_context: UserContextService) -> Optional[models.World]:
     """
     Update an existing world.
     
@@ -122,6 +137,7 @@ def update_world(db: Session, world_id: uuid.UUID, world: schemas.WorldUpdate) -
         db: Database session
         world_id: UUID of the world to update
         world: Updated world data
+        user_context: User context for validation
         
     Returns:
         The updated world or None if not found
@@ -130,6 +146,10 @@ def update_world(db: Session, world_id: uuid.UUID, world: schemas.WorldUpdate) -
         SQLAlchemyError: If database operation fails
     """
     try:
+        # Validate user can access this world
+        if not user_context.user_can_access_world(world_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
+        
         db_world = db.query(models.World).filter(models.World.id == world_id).first()
         if db_world:
             update_data = world.model_dump(exclude_unset=True)
@@ -148,7 +168,7 @@ def update_world(db: Session, world_id: uuid.UUID, world: schemas.WorldUpdate) -
         logger.error(f"Unexpected error updating world {world_id}: {str(e)}")
         raise
 
-async def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str) -> models.World:
+async def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str, user_context: UserContextService) -> models.World:
     """
     Synchronously updates a world's image by downloading from storage,
     editing with AI, and re-uploading the new image.
@@ -157,6 +177,7 @@ async def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str) 
         db: Database session
         world_id: UUID of the world to update
         new_prompt: New prompt for image modification
+        user_context: User context for validation
         
     Returns:
         The updated world
@@ -167,7 +188,11 @@ async def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str) 
         SQLAlchemyError: If database operation fails
     """
     try:
-        db_world = get_world(db, world_id=world_id)
+        # Validate user can access this world
+        if not user_context.user_can_access_world(world_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
+        
+        db_world = get_world(db, world_id=world_id, user_context=user_context)
         if not db_world:
             raise ValueError(f"World with ID {world_id} not found")
         
@@ -220,7 +245,7 @@ async def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str) 
         logger.error(f"Unexpected error updating world image {world_id}: {str(e)}")
         raise
 
-def delete_world(db: Session, world_id: uuid.UUID) -> bool:
+def delete_world(db: Session, world_id: uuid.UUID, user_context: UserContextService) -> bool:
     """
     Finds a world by its ID, deletes its associated image from storage,
     and then deletes the database record.
@@ -228,6 +253,7 @@ def delete_world(db: Session, world_id: uuid.UUID) -> bool:
     Args:
         db: Database session
         world_id: UUID of the world to delete
+        user_context: User context for validation
         
     Returns:
         True on success, False if the world is not found
@@ -236,6 +262,10 @@ def delete_world(db: Session, world_id: uuid.UUID) -> bool:
         SQLAlchemyError: If database operation fails
     """
     try:
+        # Validate user can access this world
+        if not user_context.user_can_access_world(world_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="World not found")
+        
         # Find the world record in the database
         db_world = db.query(models.World).filter(models.World.id == world_id).first()
         if not db_world:

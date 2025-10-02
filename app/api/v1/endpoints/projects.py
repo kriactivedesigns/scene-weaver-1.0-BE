@@ -4,14 +4,19 @@ from typing import List
 import uuid
 import logging
 from .... import schemas
-from ...dependencies import get_db
+from ...dependencies import get_db, get_user_service
+from ....services.user_context import UserContextService
 from ..crud.projects import create_project, get_projects, get_project, delete_project, update_project
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/", response_model=schemas.Project, status_code=status.HTTP_201_CREATED)
-def create_project_route(project: schemas.ProjectCreate, db: Session = Depends(get_db)):
+def create_project_route(
+    project: schemas.ProjectCreate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Create a new project.
     
@@ -27,7 +32,7 @@ def create_project_route(project: schemas.ProjectCreate, db: Session = Depends(g
     """
     try:
         logger.info(f"Creating new project: {project.projectName}")
-        return create_project(db=db, project=project)
+        return create_project(db=db, project=project, user_context=user_context)
     except Exception as e:
         logger.error(f"Failed to create project {project.projectName}: {str(e)}")
         raise HTTPException(
@@ -39,7 +44,8 @@ def create_project_route(project: schemas.ProjectCreate, db: Session = Depends(g
 def read_projects_route(
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
 ):
     """
     Retrieve all projects with pagination.
@@ -60,7 +66,7 @@ def read_projects_route(
         
     try:
         logger.info(f"Retrieving projects with skip={skip}, limit={limit}")
-        return get_projects(db, skip=skip, limit=limit)
+        return get_projects(db, user_context=user_context, skip=skip, limit=limit)
     except Exception as e:
         logger.error(f"Failed to retrieve projects: {str(e)}")
         raise HTTPException(
@@ -69,7 +75,11 @@ def read_projects_route(
         )
 
 @router.get("/{project_id}", response_model=schemas.Project)
-def read_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def read_project_route(
+    project_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Retrieve a single project by its ID.
     
@@ -85,7 +95,7 @@ def read_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     try:
         logger.info(f"Retrieving project: {project_id}")
-        project = get_project(db, project_id=project_id)
+        project = get_project(db, project_id=project_id, user_context=user_context)
         if project is None:
             logger.warning(f"Project not found: {project_id}")
             raise HTTPException(
@@ -103,7 +113,12 @@ def read_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
         )
 
 @router.put("/{project_id}", response_model=schemas.Project)
-def update_project_route(project_id: uuid.UUID, project_update: schemas.ProjectUpdate, db: Session = Depends(get_db)):
+def update_project_route(
+    project_id: uuid.UUID, 
+    project_update: schemas.ProjectUpdate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Update an existing project with partial data.
     
@@ -120,7 +135,7 @@ def update_project_route(project_id: uuid.UUID, project_update: schemas.ProjectU
     """
     try:
         logger.info(f"Updating project: {project_id}")
-        updated_project = update_project(db, project_id=project_id, project_update=project_update)
+        updated_project = update_project(db, project_id=project_id, project_update=project_update, user_context=user_context)
         if updated_project is None:
             logger.warning(f"Project not found for update: {project_id}")
             raise HTTPException(
@@ -139,7 +154,11 @@ def update_project_route(project_id: uuid.UUID, project_update: schemas.ProjectU
         )
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_project_route(
+    project_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Delete a project and all its related data.
     
@@ -162,7 +181,7 @@ def delete_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     try:
         logger.info(f"Deleting project: {project_id}")
-        success = delete_project(db, project_id)
+        success = delete_project(db, project_id, user_context=user_context)
         if not success:
             logger.warning(f"Project not found for deletion: {project_id}")
             raise HTTPException(

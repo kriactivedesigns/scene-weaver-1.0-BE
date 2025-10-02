@@ -4,14 +4,20 @@ from typing import List
 import uuid
 import logging
 from .... import schemas
-from ...dependencies import get_db
+from ...dependencies import get_db, get_user_service
+from ....services.user_context import UserContextService
 from ..crud.worlds import create_world, get_worlds_by_project, get_world, update_world, update_world_image, delete_world
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/projects/{project_id}/worlds", response_model=schemas.World, status_code=status.HTTP_201_CREATED)
-async def create_world_for_project_route(project_id: uuid.UUID, world: schemas.WorldCreate, db: Session = Depends(get_db)):
+async def create_world_for_project_route(
+    project_id: uuid.UUID, 
+    world: schemas.WorldCreate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Creates a World for a project and generates its image.
     If image generation fails, the world will be deleted from the database.
@@ -20,6 +26,7 @@ async def create_world_for_project_route(project_id: uuid.UUID, world: schemas.W
         project_id: UUID of the project to add the world to
         world: World data to create
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The created world with generated image
@@ -29,7 +36,7 @@ async def create_world_for_project_route(project_id: uuid.UUID, world: schemas.W
     """
     try:
         logger.info(f"Creating world '{world.name}' for project: {project_id}")
-        db_world = await create_world(db=db, project_id=project_id, world=world)
+        db_world = await create_world(db=db, project_id=project_id, world=world, user_context=user_context)
         logger.info(f"Successfully created world: {db_world.id}")
         return db_world
     except ValueError as e:
@@ -47,7 +54,8 @@ def read_worlds_for_project_route(
     project_id: uuid.UUID, 
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
 ):
     """
     Retrieve all worlds for a specific project with pagination.
@@ -57,6 +65,7 @@ def read_worlds_for_project_route(
         skip: Number of worlds to skip (default: 0)
         limit: Maximum number of worlds to return (default: 100, max: 1000)
         db: Database session
+        user_context: User context for validation
         
     Returns:
         List of worlds for the project
@@ -69,7 +78,7 @@ def read_worlds_for_project_route(
         
     try:
         logger.info(f"Retrieving worlds for project {project_id} with skip={skip}, limit={limit}")
-        return get_worlds_by_project(db=db, project_id=project_id, skip=skip, limit=limit)
+        return get_worlds_by_project(db=db, project_id=project_id, user_context=user_context, skip=skip, limit=limit)
     except Exception as e:
         logger.error(f"Failed to retrieve worlds for project {project_id}: {str(e)}")
         raise HTTPException(
@@ -78,13 +87,18 @@ def read_worlds_for_project_route(
         )
 
 @router.get("/worlds/{world_id}", response_model=schemas.World)
-def read_world_route(world_id: uuid.UUID, db: Session = Depends(get_db)):
+def read_world_route(
+    world_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Retrieve a single world by its ID.
     
     Args:
         world_id: UUID of the world to retrieve
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The requested world
@@ -94,7 +108,7 @@ def read_world_route(world_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     try:
         logger.info(f"Retrieving world: {world_id}")
-        db_world = get_world(db=db, world_id=world_id)
+        db_world = get_world(db=db, world_id=world_id, user_context=user_context)
         if db_world is None:
             logger.warning(f"World not found: {world_id}")
             raise HTTPException(
@@ -112,7 +126,12 @@ def read_world_route(world_id: uuid.UUID, db: Session = Depends(get_db)):
         )
 
 @router.put("/worlds/{world_id}", response_model=schemas.World)
-def update_world_route(world_id: uuid.UUID, world: schemas.WorldUpdate, db: Session = Depends(get_db)):
+def update_world_route(
+    world_id: uuid.UUID, 
+    world: schemas.WorldUpdate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Update a world's information.
     
@@ -120,6 +139,7 @@ def update_world_route(world_id: uuid.UUID, world: schemas.WorldUpdate, db: Sess
         world_id: UUID of the world to update
         world: Updated world data
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The updated world
@@ -129,7 +149,7 @@ def update_world_route(world_id: uuid.UUID, world: schemas.WorldUpdate, db: Sess
     """
     try:
         logger.info(f"Updating world: {world_id}")
-        db_world = update_world(db=db, world_id=world_id, world=world)
+        db_world = update_world(db=db, world_id=world_id, world=world, user_context=user_context)
         if db_world is None:
             logger.warning(f"World not found for update: {world_id}")
             raise HTTPException(
@@ -148,13 +168,18 @@ def update_world_route(world_id: uuid.UUID, world: schemas.WorldUpdate, db: Sess
         )
 
 @router.delete("/worlds/{world_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_world_route(world_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_world_route(
+    world_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Deletes a world and its associated assets.
     
     Args:
         world_id: UUID of the world to delete
         db: Database session
+        user_context: User context for validation
         
     Returns:
         Empty response with 204 status
@@ -164,7 +189,7 @@ def delete_world_route(world_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     try:
         logger.info(f"Deleting world: {world_id}")
-        was_deleted = delete_world(db=db, world_id=world_id)
+        was_deleted = delete_world(db=db, world_id=world_id, user_context=user_context)
         if not was_deleted:
             logger.warning(f"World not found for deletion: {world_id}")
             raise HTTPException(
@@ -183,7 +208,12 @@ def delete_world_route(world_id: uuid.UUID, db: Session = Depends(get_db)):
         )
 
 @router.put("/worlds/{world_id}/update-image", response_model=schemas.World, status_code=status.HTTP_200_OK)
-async def generate_world_image_route(world_id: uuid.UUID, request: schemas.ImageGenerateRequest, db: Session = Depends(get_db)):
+async def generate_world_image_route(
+    world_id: uuid.UUID, 
+    request: schemas.ImageGenerateRequest, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Updates a world's image by regenerating it based on a new prompt.
     
@@ -191,6 +221,7 @@ async def generate_world_image_route(world_id: uuid.UUID, request: schemas.Image
         world_id: UUID of the world to update the image for
         request: Image generation request with new prompt
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The updated world with new image
@@ -200,7 +231,7 @@ async def generate_world_image_route(world_id: uuid.UUID, request: schemas.Image
     """
     try:
         logger.info(f"Updating image for world: {world_id}")
-        db_world = await update_world_image(db=db, world_id=world_id, new_prompt=request.prompt)
+        db_world = await update_world_image(db=db, world_id=world_id, new_prompt=request.prompt, user_context=user_context)
         logger.info(f"Successfully updated image for world: {world_id}")
         return db_world
     except (ValueError, IOError) as e:

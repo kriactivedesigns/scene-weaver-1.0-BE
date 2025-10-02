@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from fastapi import HTTPException, status
 from .... import models, schemas
+from ....services.user_context import UserContextService
 import uuid
 import logging
 from typing import List, Optional
@@ -10,15 +12,23 @@ from ....services.ai_services import generative_services, prompt_builder
 logger = logging.getLogger(__name__)
 
 # Character CRUD functions
-def get_character(db: Session, character_id: uuid.UUID) -> Optional[models.Character]:
-    """Get a single character by ID."""
+def get_character(db: Session, character_id: uuid.UUID, user_context: UserContextService) -> Optional[models.Character]:
+    """Get a single character by ID with user validation."""
+    # Validate user can access this character
+    if not user_context.user_can_access_character(character_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Character not found")
+    
     return db.query(models.Character).filter(models.Character.id == character_id).first()
 
-def get_characters_by_project(db: Session, project_id: uuid.UUID, skip: int = 0, limit: int = 100) -> List[models.Character]:
-    """Get all characters for a project with pagination."""
+def get_characters_by_project(db: Session, project_id: uuid.UUID, user_context: UserContextService, skip: int = 0, limit: int = 100) -> List[models.Character]:
+    """Get all characters for a project with pagination and user validation."""
+    # Validate user can access this project
+    if not user_context.user_owns_project(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
     return db.query(models.Character).filter(models.Character.projectId == project_id).offset(skip).limit(limit).all()
 
-async def create_character(db: Session, character: schemas.CharacterCreate, project_id: uuid.UUID) -> models.Character:
+async def create_character(db: Session, character: schemas.CharacterCreate, project_id: uuid.UUID, user_context: UserContextService) -> models.Character:
     """
     Create a new character with optional image generation.
     If image generation fails, the character will be deleted from the database.
@@ -27,6 +37,7 @@ async def create_character(db: Session, character: schemas.CharacterCreate, proj
         db: Database session
         character: Character data to create
         project_id: UUID of the project to add the character to
+        user_context: User context for validation
         
     Returns:
         The created character with optional image path
@@ -37,6 +48,9 @@ async def create_character(db: Session, character: schemas.CharacterCreate, proj
     """
     db_character = None
     try:
+        # Validate user can access this project
+        if not user_context.user_owns_project(project_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
         # Verify project exists
         db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
         if not db_project:
@@ -99,7 +113,7 @@ async def create_character(db: Session, character: schemas.CharacterCreate, proj
         logger.error(f"Unexpected error creating character: {str(e)}")
         raise
 
-def update_character(db: Session, character_id: uuid.UUID, character: schemas.CharacterUpdate) -> Optional[models.Character]:
+def update_character(db: Session, character_id: uuid.UUID, character: schemas.CharacterUpdate, user_context: UserContextService) -> Optional[models.Character]:
     """
     Update an existing character.
     
@@ -107,6 +121,7 @@ def update_character(db: Session, character_id: uuid.UUID, character: schemas.Ch
         db: Database session
         character_id: UUID of the character to update
         character: Updated character data
+        user_context: User context for validation
         
     Returns:
         The updated character or None if not found
@@ -115,6 +130,10 @@ def update_character(db: Session, character_id: uuid.UUID, character: schemas.Ch
         SQLAlchemyError: If database operation fails
     """
     try:
+        # Validate user can access this character
+        if not user_context.user_can_access_character(character_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Character not found")
+        
         db_character = db.query(models.Character).filter(models.Character.id == character_id).first()
         if db_character:
             update_data = character.model_dump(exclude_unset=True)
@@ -133,7 +152,7 @@ def update_character(db: Session, character_id: uuid.UUID, character: schemas.Ch
         logger.error(f"Unexpected error updating character {character_id}: {str(e)}")
         raise
 
-async def update_character_image(db: Session, character_id: uuid.UUID, new_prompt: str) -> models.Character:
+async def update_character_image(db: Session, character_id: uuid.UUID, new_prompt: str, user_context: UserContextService) -> models.Character:
     """
     Updates a character's image by generating a new one based on an additional prompt.
     The new prompt is combined with the original description for context.
@@ -142,6 +161,7 @@ async def update_character_image(db: Session, character_id: uuid.UUID, new_promp
         db: Database session
         character_id: UUID of the character to update
         new_prompt: Additional prompt for image modification
+        user_context: User context for validation
         
     Returns:
         The updated character
@@ -152,7 +172,11 @@ async def update_character_image(db: Session, character_id: uuid.UUID, new_promp
         SQLAlchemyError: If database operation fails
     """
     try:
-        db_character = get_character(db, character_id=character_id)
+        # Validate user can access this character
+        if not user_context.user_can_access_character(character_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Character not found")
+        
+        db_character = get_character(db, character_id=character_id, user_context=user_context)
         if not db_character:
             raise ValueError(f"Character with ID {character_id} not found")
 
@@ -218,7 +242,7 @@ async def update_character_image(db: Session, character_id: uuid.UUID, new_promp
         logger.error(f"Unexpected error updating character image {character_id}: {str(e)}")
         raise
 
-def delete_character(db: Session, character_id: uuid.UUID) -> bool:
+def delete_character(db: Session, character_id: uuid.UUID, user_context: UserContextService) -> bool:
     """
     Finds a character by its ID, deletes its associated image from storage,
     and then deletes the database record.
@@ -226,6 +250,7 @@ def delete_character(db: Session, character_id: uuid.UUID) -> bool:
     Args:
         db: Database session
         character_id: UUID of the character to delete
+        user_context: User context for validation
         
     Returns:
         True on success, False if the character is not found
@@ -234,6 +259,10 @@ def delete_character(db: Session, character_id: uuid.UUID) -> bool:
         SQLAlchemyError: If database operation fails
     """
     try:
+        # Validate user can access this character
+        if not user_context.user_can_access_character(character_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Character not found")
+        
         # Find the character record in the database
         db_character = db.query(models.Character).filter(models.Character.id == character_id).first()
 

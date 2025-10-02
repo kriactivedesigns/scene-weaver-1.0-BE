@@ -1,6 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from fastapi import HTTPException, status
 from .... import models, schemas
+from ....services.user_context import UserContextService
 import uuid
 import logging
 from typing import List, Optional
@@ -8,19 +10,27 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 # StoryThread CRUD functions
-def get_storythread(db: Session, storythread_id: uuid.UUID) -> Optional[models.StoryThread]:
-    """Get a single story thread by ID."""
+def get_storythread(db: Session, storythread_id: uuid.UUID, user_context: UserContextService) -> Optional[models.StoryThread]:
+    """Get a single story thread by ID with user validation."""
+    # Validate user can access this story thread
+    if not user_context.user_can_access_entity_by_project(storythread_id, models.StoryThread, 'projectId'):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story thread not found")
+    
     return db.query(models.StoryThread).filter(models.StoryThread.id == storythread_id).first()
 
-def get_storythread_by_project(db: Session, project_id: uuid.UUID, skip: int = 0, limit: int = 100) -> List[models.StoryThread]:
-    """Get all story threads for a project with pagination, ordered by sequence."""
+def get_storythread_by_project(db: Session, project_id: uuid.UUID, user_context: UserContextService, skip: int = 0, limit: int = 100) -> List[models.StoryThread]:
+    """Get all story threads for a project with pagination, ordered by sequence and user validation."""
+    # Validate user owns the project
+    if not user_context.user_owns_project(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
     return db.query(models.StoryThread).filter(
         models.StoryThread.projectId == project_id
     ).order_by(
         models.StoryThread.order
     ).offset(skip).limit(limit).all()
 
-def create_storythread(db: Session, storythread: schemas.StoryThreadCreate, project_id: uuid.UUID) -> models.StoryThread:
+def create_storythread(db: Session, storythread: schemas.StoryThreadCreate, project_id: uuid.UUID, user_context: UserContextService) -> models.StoryThread:
     """
     Create a new story thread for a project.
     
@@ -28,6 +38,7 @@ def create_storythread(db: Session, storythread: schemas.StoryThreadCreate, proj
         db: Database session
         storythread: Story thread data to create
         project_id: UUID of the project to add the story thread to
+        user_context: User context for validation
         
     Returns:
         The created story thread
@@ -37,6 +48,10 @@ def create_storythread(db: Session, storythread: schemas.StoryThreadCreate, proj
         SQLAlchemyError: If database operation fails
     """
     try:
+        # Validate user owns the project
+        if not user_context.user_owns_project(project_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        
         # Verify project exists
         project = db.query(models.Project).filter(models.Project.id == project_id).first()
         if not project:
@@ -62,7 +77,7 @@ def create_storythread(db: Session, storythread: schemas.StoryThreadCreate, proj
         logger.error(f"Unexpected error creating story thread: {str(e)}")
         raise
 
-def update_storythread(db: Session, storythread_id: uuid.UUID, storythread: schemas.StoryThreadUpdate) -> Optional[models.StoryThread]:
+def update_storythread(db: Session, storythread_id: uuid.UUID, storythread: schemas.StoryThreadUpdate, user_context: UserContextService) -> Optional[models.StoryThread]:
     """
     Update an existing story thread.
     
@@ -70,6 +85,7 @@ def update_storythread(db: Session, storythread_id: uuid.UUID, storythread: sche
         db: Database session
         storythread_id: UUID of the story thread to update
         storythread: Updated story thread data
+        user_context: User context for validation
         
     Returns:
         The updated story thread or None if not found
@@ -78,6 +94,10 @@ def update_storythread(db: Session, storythread_id: uuid.UUID, storythread: sche
         SQLAlchemyError: If database operation fails
     """
     try:
+        # Validate user can access this story thread
+        if not user_context.user_can_access_entity_by_project(storythread_id, models.StoryThread, 'projectId'):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story thread not found")
+        
         db_storythread = db.query(models.StoryThread).filter(models.StoryThread.id == storythread_id).first()
         if db_storythread:
             update_data = storythread.model_dump(exclude_unset=True)
@@ -104,13 +124,14 @@ def update_storythread(db: Session, storythread_id: uuid.UUID, storythread: sche
         logger.error(f"Unexpected error updating story thread {storythread_id}: {str(e)}")
         raise
 
-def delete_storythread(db: Session, storythread_id: uuid.UUID) -> bool:
+def delete_storythread(db: Session, storythread_id: uuid.UUID, user_context: UserContextService) -> bool:
     """
     Delete a story thread from the database.
     
     Args:
         db: Database session
         storythread_id: UUID of the story thread to delete
+        user_context: User context for validation
         
     Returns:
         True on success, False if not found
@@ -119,6 +140,10 @@ def delete_storythread(db: Session, storythread_id: uuid.UUID) -> bool:
         SQLAlchemyError: If database operation fails
     """
     try:
+        # Validate user can access this story thread
+        if not user_context.user_can_access_entity_by_project(storythread_id, models.StoryThread, 'projectId'):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Story thread not found")
+        
         db_storythread = db.query(models.StoryThread).filter(models.StoryThread.id == storythread_id).first()
         if db_storythread:
             logger.info(f"Deleting story thread: {storythread_id}")

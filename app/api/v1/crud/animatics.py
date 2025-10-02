@@ -1,7 +1,9 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 from bs4 import BeautifulSoup
 from .... import models, schemas
+from ....services.user_context import UserContextService
 import uuid
 from ....services.storage import storage_provider
 from ....services.ai_services import generative_services
@@ -10,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Animatics Crud functions
-async def create_animatics_for_scene(db: Session, project_id: uuid.UUID, scene_id: uuid.UUID) -> models.AnimaticsScene:
+async def create_animatics_for_scene(db: Session, project_id: uuid.UUID, scene_id: uuid.UUID, user_context: UserContextService) -> models.AnimaticsScene:
     """
     Orchestrates creating or updating an animatic video for a single scene,
     uploading the final asset to storage.
@@ -19,6 +21,7 @@ async def create_animatics_for_scene(db: Session, project_id: uuid.UUID, scene_i
         db: Database session
         project_id: UUID of the project
         scene_id: UUID of the scene to create animatic for
+        user_context: User context for validation
         
     Returns:
         Created or updated animatic scene model
@@ -29,6 +32,10 @@ async def create_animatics_for_scene(db: Session, project_id: uuid.UUID, scene_i
         Exception: If database operation fails
     """
     try:
+        # Validate user owns the project
+        if not user_context.user_owns_project(project_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        
         logger.info(f"Creating animatics for scene {scene_id} in project {project_id}")
         
         scene = db.query(models.ScreenplayScene).filter(models.ScreenplayScene.id == scene_id).first()
@@ -118,13 +125,14 @@ async def create_animatics_for_scene(db: Session, project_id: uuid.UUID, scene_i
         db.rollback()
         raise
 
-def get_animatics_by_project(db: Session, project_id: uuid.UUID) -> List[models.AnimaticsScene]:
+def get_animatics_by_project(db: Session, project_id: uuid.UUID, user_context: UserContextService) -> List[models.AnimaticsScene]:
     """
     Retrieves all animatic scenes for a project, ordered by scene number.
     
     Args:
         db: Database session
-        project_id: UUID of the project to get animatics for
+        project_id: UUID of the project
+        user_context: User context for validation to get animatics for
         
     Returns:
         List of animatic scenes for the project
@@ -132,6 +140,10 @@ def get_animatics_by_project(db: Session, project_id: uuid.UUID) -> List[models.
     Raises:
         Exception: If database query fails
     """
+    # Validate user owns the project
+    if not user_context.user_owns_project(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
     try:
         logger.debug(f"Retrieving animatics for project: {project_id}")
         
@@ -148,13 +160,14 @@ def get_animatics_by_project(db: Session, project_id: uuid.UUID) -> List[models.
         raise
 
 
-def get_animatic_by_id(db: Session, animatic_id: uuid.UUID) -> Optional[models.AnimaticsScene]:
+def get_animatic_by_id(db: Session, animatic_id: uuid.UUID, user_context: UserContextService) -> Optional[models.AnimaticsScene]:
     """
     Retrieves a specific animatic by its ID.
     
     Args:
         db: Database session
         animatic_id: UUID of the animatic to retrieve
+        user_context: User context for validation
         
     Returns:
         Animatic scene model if found, None otherwise
@@ -162,6 +175,10 @@ def get_animatic_by_id(db: Session, animatic_id: uuid.UUID) -> Optional[models.A
     Raises:
         Exception: If database query fails
     """
+    # Validate user can access this animatic
+    if not user_context.user_can_access_entity_by_project(animatic_id, models.AnimaticsScene, 'projectId'):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Animatic not found")
+    
     try:
         logger.debug(f"Retrieving animatic: {animatic_id}")
         
@@ -180,13 +197,14 @@ def get_animatic_by_id(db: Session, animatic_id: uuid.UUID) -> Optional[models.A
         raise
 
 
-def delete_animatics(db: Session, animatics_id: uuid.UUID) -> bool:
+def delete_animatics(db: Session, animatics_id: uuid.UUID, user_context: UserContextService) -> bool:
     """
     Finds an animatic, deletes its video from storage, and then deletes the DB record.
     
     Args:
         db: Database session
         animatics_id: UUID of the animatic to delete
+        user_context: User context for validation
         
     Returns:
         True if deleted successfully, False if not found
@@ -194,6 +212,10 @@ def delete_animatics(db: Session, animatics_id: uuid.UUID) -> bool:
     Raises:
         Exception: If deletion fails
     """
+    # Validate user can access this animatic
+    if not user_context.user_can_access_entity_by_project(animatics_id, models.AnimaticsScene, 'projectId'):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Animatic not found")
+    
     try:
         logger.info(f"Deleting animatic: {animatics_id}")
         

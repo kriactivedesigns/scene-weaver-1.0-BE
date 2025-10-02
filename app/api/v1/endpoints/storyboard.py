@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 import uuid
 import logging
 from .... import schemas
-from ...dependencies import get_db
+from ...dependencies import get_db, get_user_service
+from ....services.user_context import UserContextService
 from ....services.task_manager import job_manager, run_storyboard_generation_task
 from ....services.connection_manager import manager
 from ..crud.storyboard import get_storyboards_by_project, delete_storyboard
@@ -17,7 +18,8 @@ async def generate_project_storyboards_route(
     project_id: uuid.UUID, 
     request: schemas.StoryboardsGenerate, 
     background_tasks: BackgroundTasks, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
 ):
     """
     Starts an asynchronous job to generate storyboards for the specified scene IDs.
@@ -35,6 +37,10 @@ async def generate_project_storyboards_route(
         HTTPException: If request validation fails
     """
     try:
+        # Validate user owns the project
+        if not user_context.user_owns_project(db, project_id):
+            raise HTTPException(status_code=404, detail="Project not found")
+        
         # Validate input
         if not request.scene_ids:
             logger.warning(f"Empty scene IDs list for storyboard generation: {project_id}")
@@ -117,7 +123,11 @@ async def websocket_endpoint_route(websocket: WebSocket, job_id: str):
         manager.disconnect(job_id)
 
 @router.get("/projects/{project_id}/storyboards", response_model=List[schemas.StoryboardImage])
-def get_project_storyboards_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_project_storyboards_route(
+    project_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Retrieves all existing storyboard images for a specific project,
     ordered by scene number.
@@ -134,7 +144,7 @@ def get_project_storyboards_route(project_id: uuid.UUID, db: Session = Depends(g
     """
     try:
         logger.info(f"Retrieving storyboards for project: {project_id}")
-        storyboard_images = get_storyboards_by_project(db=db, project_id=project_id)
+        storyboard_images = get_storyboards_by_project(db=db, project_id=project_id, user_context=user_context)
         logger.info(f"Retrieved {len(storyboard_images)} storyboards for project: {project_id}")
         return storyboard_images
     except Exception as e:
@@ -145,7 +155,11 @@ def get_project_storyboards_route(project_id: uuid.UUID, db: Session = Depends(g
         )
 
 @router.delete("/storyboards/{storyboard_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_storyboard_endpoint_route(storyboard_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_storyboard_endpoint_route(
+    storyboard_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Deletes a single storyboard image and its associated assets.
     
@@ -161,7 +175,7 @@ def delete_storyboard_endpoint_route(storyboard_id: uuid.UUID, db: Session = Dep
     """
     try:
         logger.info(f"Deleting storyboard: {storyboard_id}")
-        was_deleted = delete_storyboard(db=db, storyboard_id=storyboard_id)
+        was_deleted = delete_storyboard(db=db, storyboard_id=storyboard_id, user_context=user_context)
         if not was_deleted:
             logger.warning(f"Storyboard not found for deletion: {storyboard_id}")
             raise HTTPException(

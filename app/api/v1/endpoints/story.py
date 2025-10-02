@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 import uuid
 import logging
 from .... import schemas
-from ...dependencies import get_db
+from ...dependencies import get_db, get_user_service
+from ....services.user_context import UserContextService
 from ....services.ai_services import generative_services
 from ..crud.projects import get_project
 from ..crud.story import get_story_for_project, create_or_update_story_for_project, get_story, update_story, delete_story
@@ -13,7 +14,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/projects/{project_id}/generate-story", response_model=schemas.Story, status_code=status.HTTP_201_CREATED)
-def generate_story_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def generate_story_route(
+    project_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Generates a new story for a project based on its context.
     If a story already exists for this project, it will be overwritten with the new content.
@@ -21,6 +26,7 @@ def generate_story_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
     Args:
         project_id: UUID of the project to generate story for
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The generated story
@@ -32,7 +38,7 @@ def generate_story_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
         logger.info(f"Generating story for project: {project_id}")
         
         # Verify project exists
-        project = get_project(db, project_id=project_id)
+        project = get_project(db, project_id=project_id, user_context=user_context)
         if not project:
             logger.warning(f"Project not found for story generation: {project_id}")
             raise HTTPException(
@@ -41,9 +47,9 @@ def generate_story_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
             )
         
         # Gather project context
-        threads = get_storythreads_for_project(db=db, project_id=project_id)
-        characters = get_characters_for_project(db=db, project_id=project_id)
-        worlds = get_worlds_for_project(db=db, project_id=project_id)
+        threads = get_storythreads_for_project(db=db, project_id=project_id, user_context=user_context)
+        characters = get_characters_for_project(db=db, project_id=project_id, user_context=user_context)
+        worlds = get_worlds_for_project(db=db, project_id=project_id, user_context=user_context)
 
         project_context = {
             "project": project,
@@ -69,7 +75,7 @@ def generate_story_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
         story_data = schemas.StoryCreate(title=title, content=generated_story)
         
         # Create or update the story
-        db_story = create_or_update_story_for_project(db=db, story=story_data, project_id=project_id)
+        db_story = create_or_update_story_for_project(db=db, story=story_data, project_id=project_id, user_context=user_context)
         
         logger.info(f"Successfully generated story for project: {project_id}")
         return db_story
@@ -84,13 +90,18 @@ def generate_story_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
         )
     
 @router.get("/projects/{project_id}/story", response_model=schemas.Story)
-def read_story_of_project_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def read_story_of_project_route(
+    project_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Retrieve the story for a specific project.
     
     Args:
         project_id: UUID of the project to get the story for
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The story for the project
@@ -100,7 +111,7 @@ def read_story_of_project_route(project_id: uuid.UUID, db: Session = Depends(get
     """
     try:
         logger.info(f"Retrieving story for project: {project_id}")
-        db_story = get_story_for_project(db=db, project_id=project_id)
+        db_story = get_story_for_project(db=db, project_id=project_id, user_context=user_context)
         if db_story is None:
             logger.warning(f"Story not found for project: {project_id}")
             raise HTTPException(
@@ -118,7 +129,11 @@ def read_story_of_project_route(project_id: uuid.UUID, db: Session = Depends(get
         )
 
 @router.get("/stories/{story_id}", response_model=schemas.Story)
-def read_story_route(story_id: uuid.UUID, db: Session = Depends(get_db)):
+def read_story_route(
+    story_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Retrieve a single story by its ID.
     
@@ -134,7 +149,7 @@ def read_story_route(story_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     try:
         logger.info(f"Retrieving story: {story_id}")
-        db_story = get_story(db, story_id=story_id)
+        db_story = get_story(db, story_id=story_id, user_context=user_context)
         if db_story is None:
             logger.warning(f"Story not found: {story_id}")
             raise HTTPException(
@@ -152,7 +167,12 @@ def read_story_route(story_id: uuid.UUID, db: Session = Depends(get_db)):
         )
 
 @router.put("/stories/{story_id}", response_model=schemas.Story)
-def update_story_route(story_id: uuid.UUID, story: schemas.StoryContentUpdate, db: Session = Depends(get_db)):
+def update_story_route(
+    story_id: uuid.UUID, 
+    story: schemas.StoryContentUpdate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Update a story's title or content.
     
@@ -169,7 +189,7 @@ def update_story_route(story_id: uuid.UUID, story: schemas.StoryContentUpdate, d
     """
     try:
         logger.info(f"Updating story: {story_id}")
-        db_story = update_story(db=db, story_id=story_id, story=story)
+        db_story = update_story(db=db, story_id=story_id, story=story, user_context=user_context)
         if db_story is None:
             logger.warning(f"Story not found for update: {story_id}")
             raise HTTPException(
@@ -188,7 +208,11 @@ def update_story_route(story_id: uuid.UUID, story: schemas.StoryContentUpdate, d
         )
 
 @router.delete("/stories/{story_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_story_route(story_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_story_route(
+    story_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Delete a story by its ID.
     
@@ -204,7 +228,7 @@ def delete_story_route(story_id: uuid.UUID, db: Session = Depends(get_db)):
     """
     try:
         logger.info(f"Deleting story: {story_id}")
-        was_deleted = delete_story(db=db, story_id=story_id)
+        was_deleted = delete_story(db=db, story_id=story_id, user_context=user_context)
         if not was_deleted:
             logger.warning(f"Story not found for deletion: {story_id}")
             raise HTTPException(

@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 import uuid
 import logging
 from .... import schemas
-from ...dependencies import get_db
+from ...dependencies import get_db, get_user_service
+from ....services.user_context import UserContextService
 from ....services.task_manager import job_manager, run_animatic_generation_task
 from ....services.connection_manager import manager
 from ..crud.animatics import get_animatics_by_project
@@ -17,7 +18,8 @@ async def generate_project_animatics_route(
     project_id: uuid.UUID, 
     request: schemas.AnimaticsGenerateRequest, 
     background_tasks: BackgroundTasks, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
 ):
     """
     Starts an asynchronous job to generate animatics for the specified scene IDs.
@@ -35,6 +37,10 @@ async def generate_project_animatics_route(
         HTTPException: If request validation fails
     """
     try:
+        # Validate user owns the project
+        if not user_context.user_owns_project(db, project_id):
+            raise HTTPException(status_code=404, detail="Project not found")
+        
         # Validate input
         if not request.scene_ids:
             logger.warning(f"Empty scene IDs list for animatics generation: {project_id}")
@@ -117,7 +123,11 @@ async def animatic_websocket_endpoint_route(websocket: WebSocket, job_id: str):
         manager.disconnect(job_id)
 
 @router.get("/projects/{project_id}/animatics", response_model=List[schemas.AnimaticsScene])
-def get_project_animatics_route(project_id: uuid.UUID, db: Session = Depends(get_db)):
+def get_project_animatics_route(
+    project_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Retrieves all existing animatic scenes for a specific project,
     ordered by scene number.
@@ -134,7 +144,7 @@ def get_project_animatics_route(project_id: uuid.UUID, db: Session = Depends(get
     """
     try:
         logger.info(f"Retrieving animatics for project: {project_id}")
-        animatic_scenes = get_animatics_by_project(db=db, project_id=project_id)
+        animatic_scenes = get_animatics_by_project(db=db, project_id=project_id, user_context=user_context)
         logger.info(f"Retrieved {len(animatic_scenes)} animatics for project: {project_id}")
         return animatic_scenes
     except Exception as e:

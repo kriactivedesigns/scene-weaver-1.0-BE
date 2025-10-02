@@ -4,14 +4,20 @@ from typing import List
 import uuid
 import logging
 from .... import schemas
-from ...dependencies import get_db
+from ...dependencies import get_db, get_user_service
+from ....services.user_context import UserContextService
 from ..crud.characters import create_character, get_characters_by_project, get_character, update_character, delete_character, update_character_image
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/projects/{project_id}/characters", response_model=schemas.Character, status_code=status.HTTP_201_CREATED)
-async def create_character_for_project_route(project_id: uuid.UUID, character: schemas.CharacterCreate, db: Session = Depends(get_db)):
+async def create_character_for_project_route(
+    project_id: uuid.UUID, 
+    character: schemas.CharacterCreate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Creates a Character for a project and generates an initial image based on its description.
     If image generation fails, the character will be deleted from the database.
@@ -33,7 +39,8 @@ async def create_character_for_project_route(project_id: uuid.UUID, character: s
         db_character = await create_character(
             db=db, 
             project_id=project_id, 
-            character=character
+            character=character,
+            user_context=user_context
         )
         logger.info(f"Successfully created character: {db_character.id}")
         return db_character
@@ -52,7 +59,8 @@ def read_characters_for_project_route(
     project_id: uuid.UUID, 
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
 ):
     """
     Retrieve all characters for a specific project with pagination.
@@ -74,7 +82,7 @@ def read_characters_for_project_route(
         
     try:
         logger.info(f"Retrieving characters for project {project_id} with skip={skip}, limit={limit}")
-        return get_characters_by_project(db=db, project_id=project_id, skip=skip, limit=limit)
+        return get_characters_by_project(db=db, project_id=project_id, user_context=user_context, skip=skip, limit=limit)
     except Exception as e:
         logger.error(f"Failed to retrieve characters for project {project_id}: {str(e)}")
         raise HTTPException(
@@ -83,7 +91,11 @@ def read_characters_for_project_route(
         )
 
 @router.get("/characters/{character_id}", response_model=schemas.Character)
-def read_character_route(character_id: uuid.UUID, db: Session = Depends(get_db)):
+def read_character_route(
+    character_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Retrieve a single character by its ID.
     
@@ -99,7 +111,7 @@ def read_character_route(character_id: uuid.UUID, db: Session = Depends(get_db))
     """
     try:
         logger.info(f"Retrieving character: {character_id}")
-        db_character = get_character(db=db, character_id=character_id)
+        db_character = get_character(db=db, character_id=character_id, user_context=user_context)
         if db_character is None:
             logger.warning(f"Character not found: {character_id}")
             raise HTTPException(
@@ -117,7 +129,12 @@ def read_character_route(character_id: uuid.UUID, db: Session = Depends(get_db))
         )
 
 @router.put("/characters/{character_id}", response_model=schemas.Character)
-def update_character_route(character_id: uuid.UUID, character: schemas.CharacterUpdate, db: Session = Depends(get_db)):
+def update_character_route(
+    character_id: uuid.UUID, 
+    character: schemas.CharacterUpdate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Update a character's information.
     
@@ -134,7 +151,7 @@ def update_character_route(character_id: uuid.UUID, character: schemas.Character
     """
     try:
         logger.info(f"Updating character: {character_id}")
-        db_character = update_character(db=db, character_id=character_id, character=character)
+        db_character = update_character(db=db, character_id=character_id, character=character, user_context=user_context)
         if db_character is None:
             logger.warning(f"Character not found for update: {character_id}")
             raise HTTPException(
@@ -153,7 +170,11 @@ def update_character_route(character_id: uuid.UUID, character: schemas.Character
         )
 
 @router.delete("/characters/{character_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_character_route(character_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_character_route(
+    character_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Deletes a character and its associated assets by its ID.
     
@@ -170,7 +191,7 @@ def delete_character_route(character_id: uuid.UUID, db: Session = Depends(get_db
     try:
         logger.info(f"Deleting character: {character_id}")
         # Call the single CRUD function that handles the entire deletion process
-        was_deleted = delete_character(db=db, character_id=character_id)
+        was_deleted = delete_character(db=db, character_id=character_id, user_context=user_context)
 
         if not was_deleted:
             logger.warning(f"Character not found for deletion: {character_id}")
@@ -191,7 +212,12 @@ def delete_character_route(character_id: uuid.UUID, db: Session = Depends(get_db
         )
 
 @router.put("/characters/{character_id}/update-image", response_model=schemas.Character, status_code=status.HTTP_200_OK)
-async def update_character_image_route(character_id: uuid.UUID, request: schemas.ImageGenerateRequest, db: Session = Depends(get_db)):
+async def update_character_image_route(
+    character_id: uuid.UUID, 
+    request: schemas.ImageGenerateRequest, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Updates a character's image by regenerating it based on a new prompt.
     
@@ -212,7 +238,8 @@ async def update_character_image_route(character_id: uuid.UUID, request: schemas
         db_character = await update_character_image(
             db=db, 
             character_id=character_id, 
-            new_prompt=request.prompt
+            new_prompt=request.prompt,
+            user_context=user_context
         )
         logger.info(f"Successfully updated image for character: {character_id}")
         return db_character

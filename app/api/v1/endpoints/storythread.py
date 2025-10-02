@@ -4,14 +4,20 @@ from typing import List
 import uuid
 import logging
 from .... import schemas
-from ...dependencies import get_db
+from ...dependencies import get_db, get_user_service
+from ....services.user_context import UserContextService
 from ..crud.storythread import create_storythread, get_storythread_by_project, get_storythread, update_storythread, delete_storythread
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/projects/{project_id}/storythreads", response_model=schemas.StoryThread, status_code=status.HTTP_201_CREATED)
-def create_storythread_for_project_route(project_id: uuid.UUID, storythread: schemas.StoryThreadCreate, db: Session = Depends(get_db)):
+def create_storythread_for_project_route(
+    project_id: uuid.UUID, 
+    storythread: schemas.StoryThreadCreate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Creates a story thread for a project.
     
@@ -19,6 +25,7 @@ def create_storythread_for_project_route(project_id: uuid.UUID, storythread: sch
         project_id: UUID of the project to add the story thread to
         storythread: Story thread data to create
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The created story thread
@@ -28,7 +35,7 @@ def create_storythread_for_project_route(project_id: uuid.UUID, storythread: sch
     """
     try:
         logger.info(f"Creating story thread for project: {project_id}")
-        db_storythread = create_storythread(db=db, storythread=storythread, project_id=project_id)
+        db_storythread = create_storythread(db=db, storythread=storythread, project_id=project_id, user_context=user_context)
         logger.info(f"Successfully created story thread: {db_storythread.id}")
         return db_storythread
     except ValueError as e:
@@ -46,7 +53,8 @@ def read_storythreads_for_project_route(
     project_id: uuid.UUID, 
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
 ):
     """
     Retrieve all story threads for a specific project with pagination.
@@ -56,6 +64,7 @@ def read_storythreads_for_project_route(
         skip: Number of story threads to skip (default: 0)
         limit: Maximum number of story threads to return (default: 100, max: 1000)
         db: Database session
+        user_context: User context for validation
         
     Returns:
         List of story threads for the project
@@ -68,7 +77,7 @@ def read_storythreads_for_project_route(
         
     try:
         logger.info(f"Retrieving story threads for project {project_id} with skip={skip}, limit={limit}")
-        return get_storythread_by_project(db=db, project_id=project_id, skip=skip, limit=limit)
+        return get_storythread_by_project(db=db, project_id=project_id, user_context=user_context, skip=skip, limit=limit)
     except Exception as e:
         logger.error(f"Failed to retrieve story threads for project {project_id}: {str(e)}")
         raise HTTPException(
@@ -77,13 +86,18 @@ def read_storythreads_for_project_route(
         )
 
 @router.get("/storythreads/{storythread_id}", response_model=schemas.StoryThread)
-def read_storythread_route(storythread_id: uuid.UUID, db: Session = Depends(get_db)):
+def read_storythread_route(
+    storythread_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Retrieve a single story thread by its ID.
     
     Args:
         storythread_id: UUID of the story thread to retrieve
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The requested story thread
@@ -93,7 +107,7 @@ def read_storythread_route(storythread_id: uuid.UUID, db: Session = Depends(get_
     """
     try:
         logger.info(f"Retrieving story thread: {storythread_id}")
-        db_storythread = get_storythread(db=db, storythread_id=storythread_id)
+        db_storythread = get_storythread(db=db, storythread_id=storythread_id, user_context=user_context)
         if db_storythread is None:
             logger.warning(f"Story thread not found: {storythread_id}")
             raise HTTPException(
@@ -111,7 +125,12 @@ def read_storythread_route(storythread_id: uuid.UUID, db: Session = Depends(get_
         )
 
 @router.put("/storythreads/{storythread_id}", response_model=schemas.StoryThread)
-def update_storythread_route(storythread_id: uuid.UUID, storythread: schemas.StoryThreadUpdate, db: Session = Depends(get_db)):
+def update_storythread_route(
+    storythread_id: uuid.UUID, 
+    storythread: schemas.StoryThreadUpdate, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Update a story thread's information.
     
@@ -119,6 +138,7 @@ def update_storythread_route(storythread_id: uuid.UUID, storythread: schemas.Sto
         storythread_id: UUID of the story thread to update
         storythread: Updated story thread data
         db: Database session
+        user_context: User context for validation
         
     Returns:
         The updated story thread
@@ -128,7 +148,7 @@ def update_storythread_route(storythread_id: uuid.UUID, storythread: schemas.Sto
     """
     try:
         logger.info(f"Updating story thread: {storythread_id}")
-        db_storythread = update_storythread(db=db, storythread_id=storythread_id, storythread=storythread)
+        db_storythread = update_storythread(db=db, storythread_id=storythread_id, storythread=storythread, user_context=user_context)
         if db_storythread is None:
             logger.warning(f"Story thread not found for update: {storythread_id}")
             raise HTTPException(
@@ -147,13 +167,18 @@ def update_storythread_route(storythread_id: uuid.UUID, storythread: schemas.Sto
         )
 
 @router.delete("/storythreads/{storythread_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_storythread_route(storythread_id: uuid.UUID, db: Session = Depends(get_db)):
+def delete_storythread_route(
+    storythread_id: uuid.UUID, 
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
     """
     Delete a story thread by its ID.
     
     Args:
         storythread_id: UUID of the story thread to delete
         db: Database session
+        user_context: User context for validation
         
     Returns:
         Empty response with 204 status
@@ -163,7 +188,7 @@ def delete_storythread_route(storythread_id: uuid.UUID, db: Session = Depends(ge
     """
     try:
         logger.info(f"Deleting story thread: {storythread_id}")
-        was_deleted = delete_storythread(db=db, storythread_id=storythread_id)
+        was_deleted = delete_storythread(db=db, storythread_id=storythread_id, user_context=user_context)
         if not was_deleted:
             logger.warning(f"Story thread not found for deletion: {storythread_id}")
             raise HTTPException(

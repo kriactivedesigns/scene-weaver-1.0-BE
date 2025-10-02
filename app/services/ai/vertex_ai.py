@@ -7,6 +7,13 @@ from vertexai.preview.vision_models import ImageGenerationModel, Image
 from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
 from google import genai
 from google.genai import types
+from google.genai.types import (
+    EditImageConfig,
+    Image as GenAIImage,
+    MaskReferenceConfig,
+    MaskReferenceImage,
+    RawReferenceImage,
+)
 from google.genai.errors import APIError
 import time
 import asyncio
@@ -71,25 +78,36 @@ class VertexAIProvider(AIProvider):
         Edits an existing image using Vertex AI.
         """
         try:
-            model = ImageGenerationModel.from_pretrained("imagegeneration@006")
-            base_image = Image(image_bytes=original_image_bytes)
             logger.info("base_image bytes length: %d", len(original_image_bytes))
             logger.info(f"Re-generating image for editing with new prompt: {prompt}")
 
-            response = await asyncio.to_thread(
-                model.edit_image,
-                base_image=base_image,
-                prompt=prompt,
-                seed=50,
-                guidance_scale=21,
-                number_of_images=1,
-                edit_mode=["inpainting-insert", "inpainting-remove", "outpainting"]
+            # New from colaab example
+            raw_ref_image = RawReferenceImage(reference_image=GenAIImage(image_bytes=original_image_bytes), reference_id=0)
+            mask_ref_image = MaskReferenceImage(
+                reference_id=1,
+                reference_image=None,
+                config=MaskReferenceConfig(
+                    mask_mode="MASK_MODE_FOREGROUND",
+                    mask_dilation=0.1
+                )
             )
-            
+
+            response = await asyncio.to_thread(
+                self.client.models.edit_image,
+                model=os.getenv("IMAGE_EDIT_MODEL"),
+                prompt=prompt,
+                reference_images=[raw_ref_image, mask_ref_image],
+                config=EditImageConfig(
+                    number_of_images=1,
+                    safety_filter_level="BLOCK_MEDIUM_AND_ABOVE",
+                    person_generation="ALLOW_ADULT"
+                )
+            )
+
             logger.info("Image edit response: %s", response)
-            if response.images[0]:
+            if response.generated_images[0]:
                 logger.info("Image generated successfully.")
-                return response.images[0]._image_bytes
+                return response.generated_images[0].image.image_bytes
             else:
                 logger.warning("AI service returned no images for the prompt.")
                 return None

@@ -260,120 +260,147 @@ class VertexAIProvider(AIProvider):
         
     async def generate_storyboard_image_from_references(self, prompt: str, character_image_paths: List[str], world_image_paths: List[str]) -> bytes:
         """
-        Generates an image using reference images and a text prompt.
-        Returns the image data as bytes.
+        Generates a storyboard image using Gemini's multimodal capabilities to directly create images 
+        from text prompts and reference images. This approach maintains better visual consistency 
+        by using actual reference images in a single generation step.
         """
-        llm_model = GenerativeModel(os.getenv("LLM_MODEL"))
-        system_instruction = """
-            You are an expert storyboard artist and visual consistency specialist. You must create a STORYBOARD SCENE prompt that maintains character and world consistency.
-
-            CRITICAL: This is for a CINEMATIC STORYBOARD FRAME showing characters in action/scene, NOT a character portrait.
-
-            TASK BREAKDOWN:
-            1. ANALYZE reference images to understand character appearances and world aesthetics
-            2. CREATE a storyboard scene prompt that shows characters performing the described scene action
-            3. ENSURE characters look identical to reference images while engaged in the scene
-            4. MAINTAIN the artistic style requirements from the scene description
-
-            PROMPT STRUCTURE (MANDATORY):
-            - Start with "A cinematic storyboard frame showing [character description from reference] performing [scene action]"
-            - Include environment details based on world reference images
-            - Specify artistic style requirements (grayscale, cross-hatching, etc.)
-            - Focus on the ACTION/SCENE, not just character appearance
-
-            VISUAL CONSISTENCY REQUIREMENTS:
-            - Characters: Maintain facial features, hair, clothing from reference images
-            - World: Match architectural style, lighting, atmosphere from world references
-            - Style: Preserve artistic technique specifications exactly
-
-            SCENE FOCUS:
-            The final prompt must describe characters DOING something in a scene, not just standing or posing.
-            Include camera angles, composition, and the specific dramatic moment described.
-
-            REMEMBER: This is a STORYBOARD FRAME for storytelling, not a character study or portrait.
-        """
-        full_text_prompt_for_llm = f"{system_instruction}\n\nScene Description with Style Requirements: {prompt}"
-        text_part = Part.from_text(full_text_prompt_for_llm)
-
-        image_parts = []
-        all_original_image_paths = character_image_paths + world_image_paths
-
-        # Add detailed logging for reference images
-        logger.info(f"Processing {len(character_image_paths)} character references and {len(world_image_paths)} world references")
-        
-        for original_image_path in all_original_image_paths:
-            if not original_image_path:
-                continue
-                
-            image_bytes = storage_provider.download_file_as_bytes(original_image_path)
-            if image_bytes:
-                image_part = Part.from_data(data=image_bytes, mime_type="image/png")
-                image_parts.append(image_part)
-                logger.info(f"Successfully loaded reference image: {original_image_path}")
-            else:
-                logger.warning(f"Failed to load reference image: {original_image_path}")
-                
-        if not image_parts:
-            logger.warning("No reference images loaded - generated image may lack visual consistency")
-                
-        gemini_prompt_parts = [text_part] + image_parts
-
-        # Enhanced generation with emphasis on visual consistency
-        generation_config = GenerationConfig(
-            temperature=0.1,  # Lower temperature for more consistent results
-            max_output_tokens=2048,  # Allow for detailed descriptions
-        )
-
-        llm_response = llm_model.generate_content(
-            gemini_prompt_parts,
-            generation_config=generation_config
-        )
-        final_text_prompt = llm_response.text.strip()
-
-        # Enhanced logging
         try:
-            with open("log.txt", "a", encoding="utf-8") as log_file:
-                log_file.write(f"\n{'='*100}\n")
-                log_file.write(f"VISUAL CONSISTENCY GENERATION - {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                log_file.write(f"{'='*100}\n")
-                log_file.write(f"CHARACTER REFERENCES: {character_image_paths}\n")
-                log_file.write(f"WORLD REFERENCES: {world_image_paths}\n")
-                log_file.write(f"ORIGINAL SCENE PROMPT:\n{prompt}\n")
-                log_file.write(f"{'-'*50}\n")
-                log_file.write(f"ENHANCED SYSTEM INSTRUCTION:\n{system_instruction}\n")
-                log_file.write(f"{'-'*50}\n")
-                log_file.write(f"FINAL OPTIMIZED PROMPT:\n{final_text_prompt}\n")
-                log_file.write(f"{'='*100}\n\n")
-        except Exception as e:
-            logger.error(f"Failed to write enhanced log: {e}")
-
-        image_gen_model = ImageGenerationModel.from_pretrained(os.getenv("IMAGE_GENERATION_MODEL"))
-
-        try:
-            # Enhanced generation parameters for better consistency
-            logger.info("Generating storyboard image with enhanced consistency parameters")
+            logger.info(f"Generating storyboard with {len(character_image_paths)} character refs and {len(world_image_paths)} world refs")
             
-            response = await asyncio.to_thread(
-                image_gen_model.generate_images,
-                prompt=final_text_prompt,
-                number_of_images=1,
-                aspect_ratio='16:9',
-                seed=None,  # Allow random seed for variety while maintaining prompt consistency
-                safety_filter_level="BLOCK_MEDIUM_AND_ABOVE",
-                person_generation="ALLOW_ADULT"
+            # Prepare reference image parts
+            image_parts = []
+            all_image_paths = character_image_paths + world_image_paths
+            
+            for image_path in all_image_paths:
+                if image_path:
+                    image_bytes = storage_provider.download_file_as_bytes(image_path)
+                    if image_bytes:
+                        # Create image part for Google GenAI API using inline data
+                        image_part = types.Part(
+                            inline_data=types.Blob(
+                                mime_type="image/png",
+                                data=image_bytes
+                            )
+                        )
+                        image_parts.append(image_part)
+                        logger.info(f"Loaded reference image: {image_path}")
+            
+            if not image_parts:
+                logger.warning("No reference images loaded - proceeding with text-only generation")
+            
+            # Create enhanced storyboard prompt with strong style preservation
+            storyboard_prompt = f"""
+            Create a cinematic storyboard frame that EXACTLY matches the artistic style of the reference images.
+            
+            SCENE DESCRIPTION: {prompt}
+            
+            CRITICAL STYLE REQUIREMENTS:
+            - MUST maintain the EXACT artistic style, technique, and visual aesthetic from the reference images
+            - If reference images are sketched/drawn/animated: Generate in the SAME sketch/drawn/animated style
+            - If reference images are monochrome: Generate in monochrome
+            - If reference images use specific line work/shading: Use the SAME technique
+            - DO NOT make this photorealistic - match the reference image style exactly
+            
+            CHARACTER CONSISTENCY:
+            - Characters must have identical facial features, hair, clothing, and proportions from character reference images
+            - Maintain the same artistic rendering style for characters (sketch lines, shading, etc.)
+            
+            WORLD CONSISTENCY:
+            - Environment must match the architectural style, atmosphere, and visual treatment from world reference images
+            - Use the same artistic technique for backgrounds and environments
+            
+            STORYBOARD FRAME REQUIREMENTS:
+            - Show characters performing the described action/scene (NOT static portraits)
+            - Use cinematic composition appropriate for the scene
+            - Include environmental context and background elements
+            - Focus on the narrative moment and character interactions
+            - Frame like a professional film storyboard
+            
+            STYLE OVERRIDE: Do NOT create a photorealistic image. Copy the artistic style, line quality, shading technique, and visual treatment from the reference images exactly.
+            """
+            
+            # Create content parts for Gemini
+            text_part = types.Part.from_text(text=storyboard_prompt)
+            content_parts = [text_part] + image_parts
+            
+            contents = [
+                types.Content(
+                    role="user",
+                    parts=content_parts
+                )
+            ]
+            
+            # Configure generation settings for image output
+            generate_content_config = types.GenerateContentConfig(
+                temperature=0.1,  # Lower temperature for consistency
+                top_p=0.95,
+                max_output_tokens=32768,
+                response_modalities=["TEXT", "IMAGE"],
+                safety_settings=[
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_HATE_SPEECH",
+                        threshold="OFF"
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_DANGEROUS_CONTENT", 
+                        threshold="OFF"
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        threshold="OFF"
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_HARASSMENT",
+                        threshold="OFF"
+                    )
+                ]
             )
-
-            if response.images:
-                logger.info(f"Successfully generated storyboard image with {len(character_image_paths)} character refs and {len(world_image_paths)} world refs")
-                return response.images[0]._image_bytes
-            else:
-                raise ValueError("AI model did not return any images.")
+            
+            # Use storyboard image generation model from environment
+            model_name = os.getenv("STORYBOARD_IMAGE_GENERATION_MODEL")
+                     
+            # Generate the storyboard image using streaming for better monitoring
+            logger.info(f"Generating storyboard image with Gemini multimodal model: {model_name}")
+            
+            response_chunks = []
+            def generate_content_sync():
+                for chunk in self.client.models.generate_content_stream(
+                    model=model_name,
+                    contents=contents,
+                    config=generate_content_config
+                ):
+                    response_chunks.append(chunk)
+                    if chunk.text:
+                        logger.debug(f"Received text chunk: {chunk.text[:50]}...")
+                    if hasattr(chunk, 'candidates') and chunk.candidates:
+                        for candidate in chunk.candidates:
+                            if hasattr(candidate, 'content') and candidate.content:
+                                if hasattr(candidate.content, 'parts'):
+                                    for part in candidate.content.parts:
+                                        if hasattr(part, 'inline_data'):
+                                            logger.info("Received image data in response")
+            
+            # Execute the synchronous streaming call in a thread
+            await asyncio.to_thread(generate_content_sync)
+            
+            # Extract the generated image from response chunks
+            for chunk in response_chunks:
+                if hasattr(chunk, 'candidates') and chunk.candidates:
+                    for candidate in chunk.candidates:
+                        if hasattr(candidate, 'content') and candidate.content:
+                            if hasattr(candidate.content, 'parts'):
+                                for part in candidate.content.parts:
+                                    if hasattr(part, 'inline_data') and part.inline_data:
+                                        image_bytes = part.inline_data.data
+                                        logger.info(f"Successfully generated storyboard image ({len(image_bytes)} bytes)")
+                                        return image_bytes
+            
+            # If no image found in streaming response, raise an error
+            logger.error("No image generated from Gemini multimodal response")
+            raise ValueError("Gemini multimodal did not return any images")
             
         except Exception as e:
-            # Enhanced error logging
-            logger.error(f"Error during storyboard image generation: {e}")
-            logger.error(f"Final prompt length: {len(final_text_prompt)} characters")
-            logger.error(f"Reference images provided: {len(image_parts)}")
+            logger.error(f"Error in Gemini multimodal storyboard generation: {e}")
             raise
 
     async def generate_animatics_video_from_references(self, prompt: str, storyboard_image_path: str, character_image_paths: List[str], world_image_paths: List[str], duration_in_seconds: int) -> bytes:

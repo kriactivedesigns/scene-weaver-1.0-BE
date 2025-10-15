@@ -290,9 +290,17 @@ class VertexAIProvider(AIProvider):
             
             # Create enhanced storyboard prompt with strong style preservation
             storyboard_prompt = f"""
-            Create a cinematic storyboard frame that EXACTLY matches the artistic style of the reference images.
+            Create a SINGLE cinematic storyboard frame in LANDSCAPE 16:9 widescreen format that EXACTLY matches the artistic style of the reference images.
             
             SCENE DESCRIPTION: {prompt}
+            
+            CRITICAL FORMAT REQUIREMENTS:
+            - SINGLE FRAME ONLY - NOT a comic book page with multiple panels
+            - LANDSCAPE ORIENTATION ONLY - Image must be WIDER than it is tall (horizontal rectangle)
+            - 16:9 WIDESCREEN ASPECT RATIO - like a movie theater screen or TV screen
+            - This is a FILM STORYBOARD FRAME, not a comic book panel or page
+            - NEVER create portrait orientation (taller than wide) - ALWAYS landscape (wider than tall)
+            - Think widescreen movie format - the image should be a horizontal rectangle
             
             CRITICAL STYLE REQUIREMENTS:
             - MUST maintain the EXACT artistic style, technique, and visual aesthetic from the reference images
@@ -311,10 +319,14 @@ class VertexAIProvider(AIProvider):
             
             STORYBOARD FRAME REQUIREMENTS:
             - Show characters performing the described action/scene (NOT static portraits)
-            - Use cinematic composition appropriate for the scene
+            - Use cinematic composition appropriate for the scene (wide shot, medium shot, close-up)
             - Include environmental context and background elements
             - Focus on the narrative moment and character interactions
-            - Frame like a professional film storyboard
+            - Frame like a professional film storyboard in 16:9 format
+            
+            FORMAT OVERRIDE: Generate ONE SINGLE LANDSCAPE 16:9 widescreen storyboard frame. The image MUST be wider than it is tall (horizontal rectangle). Do NOT create multiple panels, comic book layouts, or portrait orientations. NEVER make the image taller than it is wide. This must be a single HORIZONTAL rectangular frame like a widescreen movie screen or television.
+            
+            ORIENTATION ENFORCEMENT: LANDSCAPE ONLY - Width must be greater than height. Think widescreen TV or movie theater format.
             
             STYLE OVERRIDE: Do NOT create a photorealistic image. Copy the artistic style, line quality, shading technique, and visual treatment from the reference images exactly.
             """

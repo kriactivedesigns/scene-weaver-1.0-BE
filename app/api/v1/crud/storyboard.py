@@ -41,14 +41,37 @@ async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_
     world_names_lower = [name.lower() for name in entities.get("worlds", [])]
 
     # Note: These paths are now GCS URLs, which is what the AI service expects.
-    character_paths = [char.imagePath for char in db.query(models.Character).filter(
-        models.Character.projectId == project_id,
-        func.lower(models.Character.name).in_(character_names_lower)
-    ).all()]
-    world_paths = [world.imagePath for world in db.query(models.World).filter(
-        models.World.projectId == project_id,
-        func.lower(models.World.name).in_(world_names_lower)
-    ).all()]
+    # Get all characters for this project
+    all_characters = db.query(models.Character).filter(
+        models.Character.projectId == project_id
+    ).all()
+    
+    # Find matching characters using simple string containment
+    matched_characters = []
+    for extracted_name in character_names_lower:
+        matches = [char for char in all_characters if extracted_name in char.name.lower()]
+        matched_characters.extend(matches)
+        print(f"  Searching for '{extracted_name}': found {len(matches)} matches")
+    
+    # Remove duplicates and get image paths
+    unique_characters = list({char.id: char for char in matched_characters}.values())
+    character_paths = [char.imagePath for char in unique_characters if char.imagePath]
+    
+    # Get all worlds for this project
+    all_worlds = db.query(models.World).filter(
+        models.World.projectId == project_id
+    ).all()
+    
+    # Find matching worlds using simple string containment
+    matched_worlds = []
+    for extracted_name in world_names_lower:
+        matches = [world for world in all_worlds if extracted_name in world.name.lower()]
+        matched_worlds.extend(matches)
+        print(f"  Searching for world '{extracted_name}': found {len(matches)} matches")
+    
+    # Remove duplicates and get image paths
+    unique_worlds = list({world.id: world for world in matched_worlds}.values())
+    world_paths = [world.imagePath for world in unique_worlds if world.imagePath]
 
     # Build style-aware prompt using the project's visual style
     scene_description = f"Cinematic storyboard scene: {plain_text_scene}"

@@ -326,9 +326,9 @@ class VertexAIProvider(AIProvider):
             
             FORMAT OVERRIDE: Generate ONE SINGLE LANDSCAPE 16:9 widescreen storyboard frame. The image MUST be wider than it is tall (horizontal rectangle). Do NOT create multiple panels, comic book layouts, or portrait orientations. NEVER make the image taller than it is wide. This must be a single HORIZONTAL rectangular frame like a widescreen movie screen or television.
             
-            ORIENTATION ENFORCEMENT: LANDSCAPE ONLY - Width must be greater than height. Think widescreen TV or movie theater format.
-            
-            STYLE OVERRIDE: Do NOT create a photorealistic image. Copy the artistic style, line quality, shading technique, and visual treatment from the reference images exactly.
+            ORIENTATION ENFORCEMENT: LANDSCAPE ONLY - Width must be greater than height.
+
+            STYLE OVERRIDE: Do not create an image in portrait mode. Do not create an image which does not follow 16:9 aspect ratio. Do NOT create a photorealistic image. Copy the artistic style, line quality, shading technique, and visual treatment from the reference images exactly.
             """
             
             # Create content parts for Gemini
@@ -341,6 +341,10 @@ class VertexAIProvider(AIProvider):
                     parts=content_parts
                 )
             ]
+
+            image_config = types.ImageConfig(
+                aspect_ratio="16:9"
+            )
             
             # Configure generation settings for image output
             generate_content_config = types.GenerateContentConfig(
@@ -348,6 +352,7 @@ class VertexAIProvider(AIProvider):
                 top_p=0.95,
                 max_output_tokens=32768,
                 response_modalities=["TEXT", "IMAGE"],
+                image_config=image_config,
                 safety_settings=[
                     types.SafetySetting(
                         category="HARM_CATEGORY_HATE_SPEECH",

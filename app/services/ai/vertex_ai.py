@@ -264,42 +264,116 @@ class VertexAIProvider(AIProvider):
         Returns the image data as bytes.
         """
         llm_model = GenerativeModel(os.getenv("LLM_MODEL"))
-        system_instruction = "Analyze the provided images and the scene description. Generate a single, highly detailed, cinematic text prompt that incorporates the style and character likenesses from the images to render the scene."
-        full_text_prompt_for_llm = f"{system_instruction}\n\nScene Description: {prompt}"
+        system_instruction = """
+            You are an expert storyboard artist and visual consistency specialist. You must create a STORYBOARD SCENE prompt that maintains character and world consistency.
+
+            CRITICAL: This is for a CINEMATIC STORYBOARD FRAME showing characters in action/scene, NOT a character portrait.
+
+            TASK BREAKDOWN:
+            1. ANALYZE reference images to understand character appearances and world aesthetics
+            2. CREATE a storyboard scene prompt that shows characters performing the described scene action
+            3. ENSURE characters look identical to reference images while engaged in the scene
+            4. MAINTAIN the artistic style requirements from the scene description
+
+            PROMPT STRUCTURE (MANDATORY):
+            - Start with "A cinematic storyboard frame showing [character description from reference] performing [scene action]"
+            - Include environment details based on world reference images
+            - Specify artistic style requirements (grayscale, cross-hatching, etc.)
+            - Focus on the ACTION/SCENE, not just character appearance
+
+            VISUAL CONSISTENCY REQUIREMENTS:
+            - Characters: Maintain facial features, hair, clothing from reference images
+            - World: Match architectural style, lighting, atmosphere from world references
+            - Style: Preserve artistic technique specifications exactly
+
+            SCENE FOCUS:
+            The final prompt must describe characters DOING something in a scene, not just standing or posing.
+            Include camera angles, composition, and the specific dramatic moment described.
+
+            REMEMBER: This is a STORYBOARD FRAME for storytelling, not a character study or portrait.
+        """
+        full_text_prompt_for_llm = f"{system_instruction}\n\nScene Description with Style Requirements: {prompt}"
         text_part = Part.from_text(full_text_prompt_for_llm)
 
         image_parts = []
-        all_original_image_paths  = character_image_paths + world_image_paths
+        all_original_image_paths = character_image_paths + world_image_paths
+
+        # Add detailed logging for reference images
+        logger.info(f"Processing {len(character_image_paths)} character references and {len(world_image_paths)} world references")
+        
         for original_image_path in all_original_image_paths:
+            if not original_image_path:
+                continue
+                
             image_bytes = storage_provider.download_file_as_bytes(original_image_path)
             if image_bytes:
                 image_part = Part.from_data(data=image_bytes, mime_type="image/png")
                 image_parts.append(image_part)
+                logger.info(f"Successfully loaded reference image: {original_image_path}")
+            else:
+                logger.warning(f"Failed to load reference image: {original_image_path}")
+                
+        if not image_parts:
+            logger.warning("No reference images loaded - generated image may lack visual consistency")
                 
         gemini_prompt_parts = [text_part] + image_parts
 
-        llm_response = llm_model.generate_content(gemini_prompt_parts)
+        # Enhanced generation with emphasis on visual consistency
+        generation_config = GenerationConfig(
+            temperature=0.1,  # Lower temperature for more consistent results
+            max_output_tokens=2048,  # Allow for detailed descriptions
+        )
+
+        llm_response = llm_model.generate_content(
+            gemini_prompt_parts,
+            generation_config=generation_config
+        )
         final_text_prompt = llm_response.text.strip()
+
+        # Enhanced logging
+        try:
+            with open("log.txt", "a", encoding="utf-8") as log_file:
+                log_file.write(f"\n{'='*100}\n")
+                log_file.write(f"VISUAL CONSISTENCY GENERATION - {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                log_file.write(f"{'='*100}\n")
+                log_file.write(f"CHARACTER REFERENCES: {character_image_paths}\n")
+                log_file.write(f"WORLD REFERENCES: {world_image_paths}\n")
+                log_file.write(f"ORIGINAL SCENE PROMPT:\n{prompt}\n")
+                log_file.write(f"{'-'*50}\n")
+                log_file.write(f"ENHANCED SYSTEM INSTRUCTION:\n{system_instruction}\n")
+                log_file.write(f"{'-'*50}\n")
+                log_file.write(f"FINAL OPTIMIZED PROMPT:\n{final_text_prompt}\n")
+                log_file.write(f"{'='*100}\n\n")
+        except Exception as e:
+            logger.error(f"Failed to write enhanced log: {e}")
 
         image_gen_model = ImageGenerationModel.from_pretrained(os.getenv("IMAGE_GENERATION_MODEL"))
 
         try:
+            # Enhanced generation parameters for better consistency
+            logger.info("Generating storyboard image with enhanced consistency parameters")
+            
             response = await asyncio.to_thread(
                 image_gen_model.generate_images,
                 prompt=final_text_prompt,
                 number_of_images=1,
-                aspect_ratio='16:9'
+                aspect_ratio='16:9',
+                seed=None,  # Allow random seed for variety while maintaining prompt consistency
+                safety_filter_level="BLOCK_MEDIUM_AND_ABOVE",
+                person_generation="ALLOW_ADULT"
             )
 
             if response.images:
-                print("image generated", response.images[0]._image_bytes[:20])
+                logger.info(f"Successfully generated storyboard image with {len(character_image_paths)} character refs and {len(world_image_paths)} world refs")
                 return response.images[0]._image_bytes
             else:
                 raise ValueError("AI model did not return any images.")
             
         except Exception as e:
-            # It's crucial to log the specific error from the AI service
-            print(f"Error during image generation with Vertex AI: {e}")
+            # Enhanced error logging
+            logger.error(f"Error during storyboard image generation: {e}")
+            logger.error(f"Final prompt length: {len(final_text_prompt)} characters")
+            logger.error(f"Reference images provided: {len(image_parts)}")
             raise
 
     async def generate_animatics_video_from_references(self, prompt: str, storyboard_image_path: str, character_image_paths: List[str], world_image_paths: List[str], duration_in_seconds: int) -> bytes:

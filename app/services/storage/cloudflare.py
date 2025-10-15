@@ -124,12 +124,27 @@ class CloudflareStorageProvider(FileStorageProvider):
         Downloads a file from Cloudflare R2 and returns its content as bytes.
         
         Args:
-            blob_name: The full path of the object to download
+            blob_name: The full path of the object to download, or a full URL
             
         Returns:
             The file content as bytes, or None if the file is not found
         """
         try:
+            # Handle both blob names and full URLs
+            if blob_name.startswith('http'):
+                # Extract blob name from URL
+                # Example: https://pub-bee2b9eafa9645a1b6d5107545fd2357.r2.dev/characters/uuid.png
+                # Should become: characters/uuid.png
+                if self.public_url in blob_name:
+                    blob_name = blob_name.replace(self.public_url + '/', '')
+                else:
+                    # Fallback: extract everything after the domain
+                    from urllib.parse import urlparse
+                    parsed_url = urlparse(blob_name)
+                    blob_name = parsed_url.path.lstrip('/')
+            
+            print(f"Attempting to download R2 file: {blob_name}")
+            
             response = self.s3_client.get_object(
                 Bucket=self.bucket_name,
                 Key=blob_name

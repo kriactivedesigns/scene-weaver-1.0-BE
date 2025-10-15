@@ -38,7 +38,7 @@ async def generate_project_storyboards_route(
     """
     try:
         # Validate user owns the project
-        if not user_context.user_owns_project(db, project_id):
+        if not user_context.user_owns_project(project_id):
             raise HTTPException(status_code=404, detail="Project not found")
         
         # Validate input
@@ -56,7 +56,7 @@ async def generate_project_storyboards_route(
         
         background_tasks.add_task(
             run_storyboard_generation_task, 
-            job_id, project_id, request.scene_ids, db
+            job_id, project_id, request.scene_ids, db, user_context
         )
         
         logger.info(f"Storyboard generation job started: {job_id}")

@@ -8,6 +8,7 @@ from ....services.user_context import UserContextService
 import uuid
 from ....services.storage import storage_provider
 from ....services.ai_services import generative_services
+from ....services.ai_services.prompt_builder import build_storyboard_prompt
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,11 @@ async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_
     scene = db.query(models.ScreenplayScene).filter(models.ScreenplayScene.id == scene_id).first()
     if not scene:
         raise ValueError("Scene not found")
+
+    # Get project to access visual style
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise ValueError("Project not found")
 
     # --- This section for gathering context and building the prompt remains the same ---
     soup = BeautifulSoup(scene.content or "", "html.parser")
@@ -44,7 +50,16 @@ async def create_storyboard_for_scene(db: Session, project_id: uuid.UUID, scene_
         func.lower(models.World.name).in_(world_names_lower)
     ).all()]
 
-    final_prompt = f"Cinematic storyboard image depicting: {plain_text_scene}"
+    # Build style-aware prompt using the project's visual style
+    scene_description = f"Cinematic storyboard scene: {plain_text_scene}"
+    
+    # Use the project's visual style to build the prompt with proper styling
+    if project.visualStyle:
+        final_prompt = build_storyboard_prompt(scene_description, project.visualStyle)
+        logger.info(f"Applied visual style '{project.visualStyle}' to storyboard generation")
+    else:
+        final_prompt = f"Cinematic storyboard image depicting: {plain_text_scene}"
+        logger.warning(f"No visual style found for project {project_id}, using default prompt")
 
     # Await the async AI service call to get the image bytes
     image_bytes = await generative_services.generate_storyboard_image_from_references(final_prompt, character_paths, world_paths)

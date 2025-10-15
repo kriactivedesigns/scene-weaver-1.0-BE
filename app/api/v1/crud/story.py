@@ -40,7 +40,7 @@ def create_or_update_story_for_project(db: Session, story: schemas.StoryCreate, 
         # Convert markdown to HTML
         html_content = markdown2.markdown(story.content)
         
-        existing_story = get_story_for_project(db=db, project_id=project_id)
+        existing_story = get_story_for_project(db=db, project_id=project_id, user_context=user_context)
         if existing_story:
             # Story exists, so update its content and title
             logger.info(f"Updating existing story for project: {project_id}")

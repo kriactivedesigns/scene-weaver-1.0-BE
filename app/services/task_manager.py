@@ -6,11 +6,12 @@ from .connection_manager import manager
 from .. import schemas
 from ..api.v1.crud.storyboard import create_storyboard_for_scene
 from ..api.v1.crud.animatics import create_animatics_for_scene
+from .user_context import UserContextService
 
 # In-memory job store - replace with Redis for production
 job_manager: Dict[str, Dict] = {}
 
-async def run_storyboard_generation_task(job_id: str, project_id: uuid.UUID, scene_ids: List[uuid.UUID], db: Session):
+async def run_storyboard_generation_task(job_id: str, project_id: uuid.UUID, scene_ids: List[uuid.UUID], db: Session, user_context: UserContextService):
     """
     The ASYNCHRONOUS background task that generates storyboard images.
     """
@@ -40,7 +41,7 @@ async def run_storyboard_generation_task(job_id: str, project_id: uuid.UUID, sce
             
             try:
                 logger.info(f"Processing scene {i}/{total_scenes} for job {job_id}")
-                storyboard = await create_storyboard_for_scene(db, project_id, scene_id)
+                storyboard = await create_storyboard_for_scene(db, project_id, scene_id, user_context)
                 
                 # Send success notification
                 await manager.send_json(job_id, {
@@ -84,7 +85,7 @@ async def run_storyboard_generation_task(job_id: str, project_id: uuid.UUID, sce
         # Always clean up the job from memory
         job_manager.pop(job_id, None)
 
-async def run_animatic_generation_task(job_id: str, project_id: uuid.UUID, scene_ids: List[uuid.UUID], db: Session):
+async def run_animatic_generation_task(job_id: str, project_id: uuid.UUID, scene_ids: List[uuid.UUID], db: Session, user_context: UserContextService):
     """
     The ASYNCHRONOUS background task that generates animatic videos.
     """
@@ -118,7 +119,8 @@ async def run_animatic_generation_task(job_id: str, project_id: uuid.UUID, scene
                 animatic = await create_animatics_for_scene(
                     db,
                     project_id,
-                    scene_id
+                    scene_id,
+                    user_context
                 )
                 
                 # Send success notification

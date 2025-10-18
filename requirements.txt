@@ -6,6 +6,13 @@ uvicorn[standard]
 sqlalchemy
 psycopg2-binary # For Postgresql
 alembic # For database migrations
+#gcp cloud sql dependencies
+pg8000
+cloud-sql-python-connector[pg8000]
+# Pydantic & Settings Management
+pydantic
+pydantic-settings
+
 
 # HTTP Client for Cloudflare D1 API
 httpx
@@ -13,10 +20,6 @@ python-multipart
 
 # AWS SDK for Cloudflare R2 (S3-compatible)
 boto3
-
-# Pydantic & Settings Management
-pydantic
-pydantic-settings
 
 # Authentication
 passlib[bcrypt]==1.7.4

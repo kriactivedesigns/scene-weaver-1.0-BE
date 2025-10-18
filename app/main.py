@@ -22,7 +22,7 @@ logging.getLogger("uvicorn").setLevel(logging.INFO)
 
 # This line creates all the database tables based on the SQLAlchemy Models
 # For Production environment, we will want to manage this with migrations (Alembic).
-models.Base.metadata.create_all(bind=engine)
+#models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="🎬 CausalSyntax SceneWeaver API",

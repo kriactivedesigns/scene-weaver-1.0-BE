@@ -1,0 +1,23 @@
+# .dockerignore
+
+# Local virtual environment
+swvenv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS and IDE files
+.DS_Store
+.idea/
+.vscode/
+
+# Git and Docker
+.git
+.gitignore
+Dockerfile
+
+# Local config
+.env
+sceneweaver.db
+log.txt

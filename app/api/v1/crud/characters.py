@@ -203,8 +203,6 @@ async def update_character_image(db: Session, character_id: uuid.UUID, new_promp
             visual_style=db_project.visualStyle
         )
         
-        logger.info("Full prompt: %s", full_prompt)
-        
         new_image_bytes = await generative_services.edit_image_from_prompt(
             prompt=full_prompt,
             original_image_bytes=original_image_bytes

@@ -49,8 +49,8 @@ def build_modify_world_prompt(original_prompt: str, prompt: str, visual_style: O
     Constructs a detailed character prompt based on the chosen visual style.
     """
     prompt = f"""
-        A modified sketch of the same image, with {prompt}, 
-        maintaining the original artistic style and features.
-        Focus on seamlessly {prompt} without altering the rest of the drawing.
+        A modified sketch of the same world, 
+        maintaining the original artistic style and features and
+        without altering the rest of the drawing make the following change: {prompt}.
     """
     return prompt

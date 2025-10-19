@@ -10,8 +10,6 @@ from google.genai import types
 from google.genai.types import (
     EditImageConfig,
     Image as GenAIImage,
-    MaskReferenceConfig,
-    MaskReferenceImage,
     RawReferenceImage,
 )
 from google.genai.errors import APIError
@@ -83,24 +81,17 @@ class VertexAIProvider(AIProvider):
 
             # New from colaab example
             raw_ref_image = RawReferenceImage(reference_image=GenAIImage(image_bytes=original_image_bytes), reference_id=0)
-            mask_ref_image = MaskReferenceImage(
-                reference_id=1,
-                reference_image=None,
-                config=MaskReferenceConfig(
-                    mask_mode="MASK_MODE_FOREGROUND",
-                    mask_dilation=0.1
-                )
-            )
 
             response = await asyncio.to_thread(
                 self.client.models.edit_image,
                 model=os.getenv("IMAGE_EDIT_MODEL"),
                 prompt=prompt,
-                reference_images=[raw_ref_image, mask_ref_image],
+                reference_images=[raw_ref_image],
                 config=EditImageConfig(
                     number_of_images=1,
                     safety_filter_level="BLOCK_MEDIUM_AND_ABOVE",
-                    person_generation="ALLOW_ADULT"
+                    person_generation="ALLOW_ADULT",
+                    edit_mode="EDIT_MODE_STYLE"
                 )
             )
 

@@ -211,8 +211,13 @@ async def update_world_image(db: Session, world_id: uuid.UUID, new_prompt: str, 
         if not original_image_bytes:
             raise IOError("Failed to retrieve original image from storage.")
 
-        # Generate new image
-        full_prompt = prompt_builder.build_modify_world_prompt(new_prompt, db_project.visualStyle)
+        # Generate new prompt and create edited image
+        full_prompt = prompt_builder.build_modify_world_prompt(
+            original_prompt=db_world.description,
+            prompt=new_prompt,
+            visual_style=db_project.visualStyle
+        )
+        
         new_image_bytes = await generative_services.edit_image_from_prompt(full_prompt, original_image_bytes)
         if not new_image_bytes:
             raise Exception("AI service failed to generate edited image.")

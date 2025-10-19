@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import models
 from .database import engine
 from .middleware import AuthenticationMiddleware
+from .config.cors import CORS_ORIGINS, CORS_CREDENTIALS, CORS_METHODS, CORS_HEADERS
 from .api.v1.endpoints import projects, worlds, characters, storythread, story, screenplay, storyboard, animatics, auth # Import projects router
 
 # Configure logging
@@ -22,7 +23,7 @@ logging.getLogger("uvicorn").setLevel(logging.INFO)
 
 # This line creates all the database tables based on the SQLAlchemy Models
 # For Production environment, we will want to manage this with migrations (Alembic).
-#models.Base.metadata.create_all(bind=engine)
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="🎬 CausalSyntax SceneWeaver API",
@@ -152,13 +153,6 @@ app.openapi = custom_openapi
 # For development, this includes typical localhost port for frontend frameworks.
 # We must add the production domain before deploying
 
-# Development origins (specific domains for security)
-origins = [
-    "http://localhost",
-    "http://localhost:4200",
-    "https://www.causalsyntax.com",
-]
-
 # For development only - uncomment the line below to allow all origins
 # WARNING: Never use "*" in production!
 # origins = ["*"]
@@ -166,10 +160,10 @@ origins = [
 # Add the CORS middleware to the application.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=CORS_CREDENTIALS,
+    allow_methods=CORS_METHODS,
+    allow_headers=CORS_HEADERS,
     expose_headers=["*"]
 )
 

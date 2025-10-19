@@ -7,10 +7,16 @@ import os
 from typing import List
 
 # CORS configuration from environment variables
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "").split(",")
-CORS_CREDENTIALS = os.getenv("CORS_CREDENTIALS", "true").lower() == "true"
-CORS_METHODS = os.getenv("CORS_METHODS", "").split(",")
-CORS_HEADERS = os.getenv("CORS_HEADERS", "").split(",")
+CORS_ORIGINS_ENV = os.getenv("CORS_ORIGINS")
+CORS_ORIGINS = [origin.strip() for origin in CORS_ORIGINS_ENV.split(",") if origin.strip()]
+
+CORS_METHODS_ENV = os.getenv("CORS_METHODS") 
+CORS_METHODS = [method.strip() for method in CORS_METHODS_ENV.split(",") if method.strip()]
+
+CORS_HEADERS_ENV = os.getenv("CORS_HEADERS")
+CORS_HEADERS = [header.strip() for header in CORS_HEADERS_ENV.split(",") if header.strip()]
+
+CORS_CREDENTIALS = os.getenv("CORS_CREDENTIALS")
 
 def get_cors_headers(origin: str = None) -> dict:
     """
@@ -28,6 +34,8 @@ def get_cors_headers(origin: str = None) -> dict:
     
     if origin and origin in CORS_ORIGINS:
         allowed_origin = origin
+
+    print("CORS Headers:", allowed_origin)
     
     return {
         "Access-Control-Allow-Origin": allowed_origin,

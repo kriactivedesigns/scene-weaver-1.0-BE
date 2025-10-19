@@ -20,27 +20,43 @@ if DATABASE_PROVIDER == "postgresql":
     print("✅ 🗄️ PostgreSQL database connected successfully")
 elif DATABASE_PROVIDER == "gcp_postgresql":
 
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    
-    print("🗄️ Using database provider: gcp_postgresql")
-
     # PostgreSQL on GCP doesn't need check_same_thread
-    db_host = os.getenv("INSTANCE_HOST")
     db_user = os.getenv("DB_USER")
     db_pass = os.getenv("DB_PASS")
     db_name = os.getenv("DB_NAME")
     db_port = os.getenv("DB_PORT")
     unix_socket_path = os.getenv("INSTANCE_UNIX_SOCKET")
 
-    engine = create_engine(
-        sqlalchemy.engine.url.URL.create(
+    if unix_socket_path:
+        # Cloud Run: Use Unix socket
+        print("🗄️  Using database provider: GCP Cloud SQL (Unix Socket)")
+        db_url = sqlalchemy.engine.url.URL.create(
             drivername="postgresql+pg8000",
             username=db_user,
             password=db_pass,
             database=db_name,
-            query={"unix_sock": f"{db_host}/.s.PGSQL.{db_port}"},
-        ),
-    )
+            query={"unix_sock": f"{unix_socket_path}/.s.PGSQL.{db_port}"},
+        )
+    else: 
+        # Local development: Use TCP connection via Cloud SQL Proxy
+        print(f"🗄️  Using database provider: GCP Cloud SQL (TCP via Proxy)")
+
+        db_host = os.getenv("DB_HOST")
+
+        print(f"    Connecting to {db_host}:{db_port}")
+        db_url = sqlalchemy.engine.url.URL.create(
+            drivername="postgresql+pg8000",
+            username=db_user,
+            password=db_pass,
+            host=db_host,
+            port=db_port,
+            database=db_name,
+        )
+
+    print("🗄️ GCP PostgreSQL URL", db_url)
+
+    engine = create_engine(db_url)
+    
     print("🗄️ Initialized GCP PostgreSQL database")
     print("✅ 🗄️ GCP PostgreSQL database connected successfully")
 

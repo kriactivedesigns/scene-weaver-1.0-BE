@@ -195,12 +195,18 @@ async def generate_project_video_preview(
             user_context=user_context
         )
         
-        # Return the video as a streaming response
+        # Create a BytesIO object
+        video_io = io.BytesIO(video_bytes)
+        video_size = len(video_bytes)
+        
+        # Return the video as a streaming response with content length
         return StreamingResponse(
-            content=io.BytesIO(video_bytes),
+            content=video_io,
             media_type="video/mp4",
             headers={
-                "Content-Disposition": f"attachment; filename=preview_{project_id}.mp4"
+                "Content-Disposition": f"attachment; filename=preview_{project_id}.mp4",
+                "Content-Length": str(video_size),
+                "Accept-Ranges": "bytes"
             }
         )
         

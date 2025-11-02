@@ -1,0 +1,43 @@
+# Core Framework
+fastapi
+uvicorn[standard]
+
+# Database and ORM
+sqlalchemy
+psycopg2-binary # For Postgresql
+alembic # For database migrations
+#gcp cloud sql dependencies
+pg8000
+cloud-sql-python-connector[pg8000]
+# Pydantic & Settings Management
+pydantic
+pydantic-settings
+
+
+# HTTP Client for Cloudflare D1 API
+httpx
+python-multipart
+
+# AWS SDK for Cloudflare R2 (S3-compatible)
+boto3
+
+# Authentication
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.3
+python-jose[cryptography]
+
+# For UUIDs and other utilities
+python-dotenv
+
+# Google AI for image generation
+google-genai
+google-generativeai
+vertexai
+Pillow
+requests
+
+#Markdown-to-HTML Conversion
+markdown2
+
+#Sanitize HTML Content
+beautifulsoup4

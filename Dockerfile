@@ -19,6 +19,9 @@ FROM python:3.11-slim
 # Set the working directory inside the final container.
 WORKDIR /usr/src/app
 
+# Install FFmpeg binary
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Set non-root user for security
 RUN useradd -m dockeradmin
 USER dockeradmin

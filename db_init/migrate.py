@@ -131,42 +131,101 @@ class DatabaseMigrator:
             
         return counts
     
-    def migrate_table(self, model_class, table_name):
-        """Migrate data for a specific table"""
+    def get_sqlite_columns(self, table_name):
+        """Get the actual columns that exist in the SQLite table"""
+        try:
+            result = self.sqlite_session.execute(text(f"PRAGMA table_info({table_name})"))
+            columns = [row[1] for row in result.fetchall()]  # row[1] is the column name
+            return columns
+        except Exception as e:
+            logger.warning(f"Could not get SQLite columns for {table_name}: {e}")
+            return []
+    
+    def migrate_table_smart(self, model_class, table_name):
+        """Migrate data for a specific table with smart schema handling"""
         try:
             logger.info(f"Migrating {table_name}...")
             
-            # Get all records from SQLite
-            sqlite_records = self.sqlite_session.query(model_class).all()
+            # Get the actual columns in SQLite for this table
+            sqlite_columns = self.get_sqlite_columns(table_name)
+            logger.info(f"  SQLite columns: {sqlite_columns}")
             
-            if not sqlite_records:
+            # Get PostgreSQL model columns
+            postgres_columns = [col.name for col in model_class.__table__.columns]
+            logger.info(f"  PostgreSQL columns: {postgres_columns}")
+            
+            # Find common columns
+            common_columns = set(sqlite_columns) & set(postgres_columns)
+            missing_in_sqlite = set(postgres_columns) - set(sqlite_columns)
+            
+            if missing_in_sqlite:
+                logger.info(f"  Columns missing in SQLite (will use defaults): {missing_in_sqlite}")
+            
+            # Build a custom query to select only existing columns from SQLite
+            select_columns = [f'"{col}"' for col in common_columns]
+            if not select_columns:
+                logger.warning(f"  No common columns found for {table_name}")
+                return True
+                
+            query = f'SELECT {", ".join(select_columns)} FROM "{table_name}"'
+            result = self.sqlite_session.execute(text(query))
+            sqlite_data = result.fetchall()
+            
+            if not sqlite_data:
                 logger.info(f"  No records found in {table_name}")
                 return True
             
             migrated_count = 0
             skipped_count = 0
             
-            for record in sqlite_records:
+            for row in sqlite_data:
                 try:
+                    # Build record dict with only available columns
+                    record_dict = {}
+                    for i, col_name in enumerate(common_columns):
+                        record_dict[col_name] = row[i]
+                    
+                    # Add default values for missing columns
+                    for col_name in missing_in_sqlite:
+                        column = next((col for col in model_class.__table__.columns if col.name == col_name), None)
+                        if column is not None:
+                            if col_name == 'name' and table_name == 'Users':
+                                # For Users table, generate name from email
+                                email = record_dict.get('email', 'unknown')
+                                record_dict['name'] = email.split('@')[0] if '@' in email else 'unknown'
+                            elif column.default is not None:
+                                if callable(column.default.arg):
+                                    record_dict[col_name] = column.default.arg()
+                                else:
+                                    record_dict[col_name] = column.default.arg
+                            elif not column.nullable:
+                                # Provide reasonable defaults for non-nullable columns
+                                if column.type.python_type == str:
+                                    record_dict[col_name] = ''
+                                elif column.type.python_type == int:
+                                    record_dict[col_name] = 0
+                                elif column.type.python_type == bool:
+                                    record_dict[col_name] = True
+                    
                     # Check if record already exists in PostgreSQL
-                    existing = self.postgres_session.query(model_class).filter_by(id=record.id).first()
+                    existing = self.postgres_session.query(model_class).filter_by(id=record_dict['id']).first()
                     
                     if existing:
                         skipped_count += 1
                         continue
                     
                     # Create new record in PostgreSQL
-                    # Get all column values
-                    record_dict = {}
-                    for column in model_class.__table__.columns:
-                        record_dict[column.name] = getattr(record, column.name)
-                    
                     new_record = model_class(**record_dict)
                     self.postgres_session.add(new_record)
                     migrated_count += 1
                     
                 except IntegrityError as e:
                     logger.warning(f"  [WARNING] Skipping duplicate record in {table_name}: {e}")
+                    self.postgres_session.rollback()
+                    skipped_count += 1
+                    continue
+                except Exception as e:
+                    logger.warning(f"  [WARNING] Skipping problematic record in {table_name}: {e}")
                     self.postgres_session.rollback()
                     skipped_count += 1
                     continue
@@ -181,6 +240,10 @@ class DatabaseMigrator:
             logger.error(f"  [ERROR] Failed to migrate {table_name}: {e}")
             self.postgres_session.rollback()
             return False
+    
+    def migrate_table(self, model_class, table_name):
+        """Migrate data for a specific table (wrapper for backward compatibility)"""
+        return self.migrate_table_smart(model_class, table_name)
     
     def migrate_all_data(self):
         """Migrate all data in dependency order"""

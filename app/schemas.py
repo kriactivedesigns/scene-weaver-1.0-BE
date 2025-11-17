@@ -248,6 +248,9 @@ class AnimaticsSceneUpdate(BaseModel):
 class AnimaticsGenerateRequest(BaseModel):
     scene_ids: list[uuid.UUID]
 
+class AnimaticsPreviewRequest(BaseModel):
+    scene_ids: List[uuid.UUID] = Field(..., min_length=1)
+
 class AnimaticsScene(AnimaticsSceneBase):
     id: uuid.UUID
     projectId: uuid.UUID

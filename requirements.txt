@@ -41,3 +41,6 @@ markdown2
 
 #Sanitize HTML Content
 beautifulsoup4
+
+#Video Encoding and Processing
+ffmpeg-python

@@ -1,14 +1,17 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import uuid
+import io
 import logging
 from .... import schemas
 from ...dependencies import get_db, get_user_service
 from ....services.user_context import UserContextService
 from ....services.task_manager import job_manager, run_animatic_generation_task
 from ....services.connection_manager import manager
-from ..crud.animatics import get_animatics_by_project
+from ..crud.animatics import get_animatics_by_project, create_video_for_scenes
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -152,4 +155,64 @@ def get_project_animatics_route(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve animatics"
+        )
+
+@router.post("/projects/{project_id}/animatics/preview-video")
+async def generate_project_video_preview(
+    project_id: uuid.UUID,
+    request: schemas.AnimaticsPreviewRequest,
+    db: Session = Depends(get_db),
+    user_context: UserContextService = Depends(get_user_service)
+):
+    """
+    Generates a preview MP4 video from the storyboard images. Returns the video as a response.
+    This is a temporary preview and is not stored in the database.
+    
+    Args:
+        project_id: UUID of the project
+        request: Request containing list of scene UUIDs to include in the video
+        db: Database session
+        user_context: User context for validation
+    
+    Returns:
+        StreamingResponse containing the MP4 video
+    """
+    try:
+        if not request.scene_ids:
+            logger.warning(f"Empty scene IDs list for video preview: {project_id}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Scene IDs list cannot be empty"
+            )
+        
+        logger.info(f"Starting preview video generation for project {project_id} with {len(request.scene_ids)} scenes")
+        
+        # Generate the video
+        video_bytes = await create_video_for_scenes(
+            db=db,
+            project_id=project_id,
+            scene_ids=request.scene_ids,
+            user_context=user_context
+        )
+        
+        # Create a BytesIO object
+        video_io = io.BytesIO(video_bytes)
+        video_size = len(video_bytes)
+        
+        # Return the video as a streaming response with content length
+        return StreamingResponse(
+            content=video_io,
+            media_type="video/mp4",
+            headers={
+                "Content-Disposition": f"attachment; filename=preview_{project_id}.mp4",
+                "Content-Length": str(video_size),
+                "Accept-Ranges": "bytes"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to generate preview video for project {project_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate preview video: {str(e)}"
         )

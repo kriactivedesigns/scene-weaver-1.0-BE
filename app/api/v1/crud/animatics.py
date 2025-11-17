@@ -1,13 +1,16 @@
+import uuid
+import tempfile
+import logging
+import ffmpeg
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from bs4 import BeautifulSoup
-from .... import models, schemas
+from .... import models
 from ....services.user_context import UserContextService
-import uuid
+from pathlib import Path
 from ....services.storage import storage_provider
 from ....services.ai_services import generative_services
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +128,146 @@ async def create_animatics_for_scene(db: Session, project_id: uuid.UUID, scene_i
         db.rollback()
         raise
 
+async def create_video_for_scenes(
+    db: Session, 
+    project_id: uuid.UUID, 
+    scene_ids: List[uuid.UUID], 
+    user_context: UserContextService
+) -> bytes:
+    """
+    Creates a preview video from the storyboard images without storing it.
+    
+    Args:
+        db: Database session
+        project_id: UUID of the project
+        scene_ids: List of scene UUIDs to process
+        user_context: User context for validation
+        
+    Returns:
+        bytes: The generated MP4 video bytes
+        
+    Raises:
+        HTTPException: If user doesn't have access to project
+        ValueError: If scenes or storyboards are missing
+        IOError: If video generation fails
+    """
+    # Validate user owns the project
+    if not user_context.user_owns_project(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    
+    logger.info(f"Creating video data for scenes: {scene_ids}")
+    
+    scene_data = []
+    for scene_id in scene_ids:
+        # Get the screenplay scene
+        scene = db.query(models.ScreenplayScene).filter(
+            models.ScreenplayScene.id == scene_id,
+            models.ScreenplayScene.projectId == project_id
+        ).first()
+        
+        if not scene:
+            logger.error(f"Scene not found: {scene_id}")
+            raise ValueError(f"Scene not found: {scene_id}")
+            
+        # Get the corresponding storyboard
+        storyboard = db.query(models.StoryboardImage).filter(
+            models.StoryboardImage.sceneId == scene_id
+        ).first()
+        
+        if not storyboard:
+            logger.error(f"Storyboard not found for scene: {scene_id}")
+            raise ValueError(f"Storyboard not found for scene: {scene_id}")
+            
+        # Build scene data dictionary matching AnimaticsScene schema
+        scene_info = {
+            "sceneNumber": scene.sceneNumber,
+            "imagePath": storyboard.imagePath,
+            "duration": 5 #scene.duration
+        }
+        scene_data.append(scene_info)
+
+    
+    
+    # Sort scenes by scene number to maintain sequence
+    scene_data.sort(key=lambda x: x["sceneNumber"])
+    
+    logger.info(f"Successfully collected data for {len(scene_data)} scenes")
+
+    # Create temporary directory and process files
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Download and prepare images
+        input_files = []
+        for idx, scene in enumerate(scene_data):
+            # Download image from storage
+            image_bytes = storage_provider.download_file_as_bytes(scene["imagePath"])
+            if not image_bytes:
+                logger.error(f"Failed to download image for scene {scene['sceneNumber']}")
+                raise IOError(f"Failed to download image for scene {scene['sceneNumber']}")
+            
+            # Save image to temp file
+            temp_image_path = Path(temp_dir) / f"scene_{idx}.png"
+            with open(temp_image_path, 'wb') as f:
+                f.write(image_bytes)
+            
+            # Store file info
+            input_files.append({
+                'path': str(temp_image_path),
+                'duration': scene['duration'] or 10
+            })
+
+        logger.info(f"Prepared {len(input_files)} input files for video creation")
+
+        # Setup output and concat files
+        output_path = Path(temp_dir) / f"{uuid.uuid4()}.mp4"
+        concat_file = Path(temp_dir) / "concat.txt"
+
+        # Write concat file
+        with open(concat_file, "w", encoding='utf-8', newline='\n') as f:
+            f.write("ffconcat version 1.0\n")  # Required header
+            for input_file in input_files:
+                file_path = Path(input_file['path']).absolute().as_posix()
+                f.write(f"file '{file_path}'\n")
+                f.write(f"duration {input_file['duration']}\n")
+
+        logger.info("Starting FFmpeg process...")
+
+        try:
+            # Run FFmpeg command
+            ffmpeg.input(
+                str(concat_file), 
+                format='concat', 
+                safe=0
+            ).output(
+                str(output_path),
+                vcodec='libx264',
+                preset='ultrafast',
+                video_bitrate='2M',
+                r=30,
+                pix_fmt='yuv420p'
+            ).global_args(
+                '-hide_banner',
+                '-loglevel', 'error'
+            ).overwrite_output().run()
+
+            # Read and return the video
+            with open(output_path, 'rb') as f:
+                video_bytes = f.read()
+            
+            logger.info(f"Successfully generated video: {len(video_bytes)} bytes")
+            return video_bytes
+
+        except ffmpeg.Error as e:
+            error_message = e.stderr.decode() if e.stderr else str(e)
+            logger.error(f"FFmpeg error: {error_message}")
+            raise IOError(f"Failed to create video: {error_message}")
+        except Exception as e:
+            logger.error(f"Error during video creation: {str(e)}")
+            raise IOError(f"Failed to create video: {str(e)}")
+                    
+        except Exception as e:
+            logger.error(f"Error during video creation: {str(e)}")
+            raise
+
 def get_animatics_by_project(db: Session, project_id: uuid.UUID, user_context: UserContextService) -> List[models.AnimaticsScene]:
     """
     Retrieves all animatic scenes for a project, ordered by scene number.
@@ -158,7 +301,6 @@ def get_animatics_by_project(db: Session, project_id: uuid.UUID, user_context: U
     except Exception as e:
         logger.error(f"Failed to retrieve animatics for project {project_id}: {str(e)}")
         raise
-
 
 def get_animatic_by_id(db: Session, animatic_id: uuid.UUID, user_context: UserContextService) -> Optional[models.AnimaticsScene]:
     """
@@ -195,7 +337,6 @@ def get_animatic_by_id(db: Session, animatic_id: uuid.UUID, user_context: UserCo
     except Exception as e:
         logger.error(f"Failed to retrieve animatic {animatic_id}: {str(e)}")
         raise
-
 
 def delete_animatics(db: Session, animatics_id: uuid.UUID, user_context: UserContextService) -> bool:
     """
